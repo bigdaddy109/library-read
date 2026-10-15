@@ -45,8 +45,11 @@ The site **is** `docs/` (GitHub Pages: `main` `/docs`). Vanilla ES modules, no b
 | `docs/reader.js` | Paginated reader (CSS columns) with page-flip leaf + swipe |
 | `docs/content.js` | EPUB chapter → sanitized DOM (no scripts, no EPUB CSS, zip images as blob URLs) |
 | `docs/listen.js` | Listen-along: chapter-level audio ↔ text alignment |
+| `docs/store.js` | IndexedDB cache of downloaded EPUBs |
 | `docs/library.js`, `docs/drive.js`, `docs/epub.js`, `docs/catalog.js`, `docs/covers.js`, `docs/search.js` | Ported from Library Listen (keys/names adapted) |
 | `docs/sw.js` | Shell-only cache + Drive media proxy |
+| `docs/sample/demo.epub` | 翻頁試讀 demo shown before sign-in; regenerate with `node scripts/build-demo-epub.mjs` |
+| `test/library-fixture.mjs`, `test/fake-drive.mjs` | Multi-series fixture Library + fake GIS / Drive v3 shared by unit and e2e tests |
 
 ## Cache-bust
 
@@ -62,4 +65,6 @@ npx playwright test          # needs @playwright/test + chromium + webkit
 
 CI (`.github/workflows/acceptance.yml`, free GitHub runners) runs the same.
 
-Preview: `node e2e/server.mjs` then http://127.0.0.1:8080/. The multi-series Drive fixture (fake GIS + fake Drive API) is injected only by the Playwright suite (`e2e/drive-fixture.mjs`); the shipped site has no test hooks.
+Preview: `node e2e/server.mjs` then http://127.0.0.1:8080/library-read/. The fake GIS + Drive API is injected only by Playwright routing (`e2e/fixtures.mjs`); the shipped site has no test hooks. `LIVE_URL=https://bigdaddy109.github.io/library-read/ npx playwright test e2e/acceptance.playwright.mjs` runs the same suite against Pages.
+
+Playwright limits to know: in WebKit, requests from a service-worker-controlled page (and the SW's own requests) cannot be stubbed, so SW-on WebKit tests avoid Google; in Chromium, a fulfilled 206 for a SW request breaks media, so the fake answers SW requests with 200 (a real network 206 through the proxy plays fine).
