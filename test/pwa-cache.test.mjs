@@ -17,7 +17,9 @@ describe("PWA shell cache lockstep", () => {
   const sw = read("sw.js");
   const version = Number(sw.match(/const CACHE = "library-read-shell-v(\d+)";/)?.[1]);
   const assets = [...sw.match(/const ASSETS = \[([\s\S]*?)\];/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  const files = walk(DOCS).filter((f) => !f.endsWith(".nojekyll") && !f.endsWith(".md"));
+  // og-image.png is for link-preview crawlers only; keeping it out of the shell cache saves 250 KB per install.
+  const NOT_SHELL = new Set(["og-image.png"]);
+  const files = walk(DOCS).filter((f) => !f.endsWith(".nojekyll") && !f.endsWith(".md") && !NOT_SHELL.has(f));
 
   it("declares an integer shell version", () => {
     assert.ok(Number.isInteger(version) && version > 0);
