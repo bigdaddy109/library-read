@@ -48,6 +48,7 @@ The site **is** `docs/` (GitHub Pages: `main` `/docs`). Vanilla ES modules, no b
 | `docs/store.js` | IndexedDB cache of downloaded EPUBs |
 | `docs/library.js`, `docs/drive.js`, `docs/epub.js`, `docs/catalog.js`, `docs/covers.js`, `docs/search.js` | Ported from Library Listen (keys/names adapted) |
 | `docs/sw.js` | Shell-only cache + Drive media proxy |
+| `docs/og-image.png` | 1200×630 share preview referenced by the `og:` / `twitter:` tags in every HTML page (absolute `https://bigdaddy109.github.io/library-read/` URLs); regenerate with `node scripts/build-og-image.mjs`; not in the shell cache. `test/share-preview.test.mjs` guards it |
 | `docs/sample/demo.epub` | 翻頁試讀 demo shown before sign-in; regenerate with `node scripts/build-demo-epub.mjs` |
 | `test/library-fixture.mjs`, `test/fake-drive.mjs` | Multi-series fixture Library + fake GIS / Drive v3 shared by unit and e2e tests |
 
