@@ -1,0 +1,15 @@
+{
+  "name": "Library Read",
+  "short_name": "讀書",
+  "description": "翻頁讀共享 Library 資料夾裡的電子書，有音檔的書可以邊聽邊讀。",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3eee4",
+  "theme_color": "#f3eee4",
+  "icons": [
+    { "src": "./icon.svg?v=1", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./apple-touch-icon.png?v=1", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

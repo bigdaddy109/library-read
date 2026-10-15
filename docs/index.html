@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f3eee4" />
+    <meta
+      name="description"
+      content="Library Read — 翻頁讀電子書，有音檔的書可以邊聽邊讀。用 Google 登入讀共享的 Library 資料夾。"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="讀書" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg?v=1" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=1" />
+    <link rel="stylesheet" href="./styles.css?v=1" />
+    <title>書架 · Library Read</title>
+  </head>
+  <body class="shell-shelf">
+    <div id="app" class="paper">
+      <header class="mast">
+        <p class="eyebrow">Library Read <span id="app-version" class="app-version"></span></p>
+        <div class="mast-row">
+          <h1>書架</h1>
+          <div class="mast-links">
+            <a class="player-link" href="https://bigdaddy109.github.io/library-listen/">Library Listen</a>
+          </div>
+        </div>
+        <p class="lede">翻頁讀電子書；有音檔的書可以邊聽邊讀。用 Google 登入讀共享的 <code>Library</code> 資料夾。</p>
+        <section id="onboarding" class="onboarding">
+          <div class="load-row">
+            <button type="button" id="btn-google" class="primary large">用 Google 登入</button>
+            <button type="button" id="btn-reload" class="ghost hidden">重新整理書架</button>
+            <button type="button" id="btn-signout" class="ghost hidden">登出</button>
+          </div>
+          <p class="hint" id="drive-status" role="status" aria-live="polite"></p>
+        </section>
+      </header>
+
+      <div class="toolbar">
+        <div class="search" role="search">
+          <label class="visually-hidden" for="shelf-query">搜尋書名、作者或章節</label>
+          <input
+            id="shelf-query"
+            type="search"
+            placeholder="搜尋書名、作者、章節"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+            enterkeyhint="search"
+          />
+          <button type="button" id="btn-clear-search" class="search-clear hidden" aria-label="清除搜尋">×</button>
+        </div>
+        <p class="view-label">封面牆</p>
+      </div>
+
+      <div id="series-chips" class="chips" aria-label="系列"></div>
+      <p id="shelf-count" class="count"></p>
+      <main id="stage" class="stage" aria-live="polite"></main>
+    </div>
+
+    <div id="book-layer" class="book-layer hidden" hidden>
+      <button type="button" id="btn-close-book" class="close-book" aria-label="放回書架">放回</button>
+      <div id="book-stage" class="book-stage"></div>
+    </div>
+
+    <section id="reader" class="reader hidden" hidden aria-label="閱讀">
+      <header class="reader-top">
+        <button type="button" id="reader-back" class="ghost">← 書架</button>
+        <p id="reader-title" class="reader-title"></p>
+        <button type="button" id="reader-toc" class="ghost">目錄</button>
+        <button type="button" id="reader-font" class="ghost" aria-label="字級">Aa</button>
+      </header>
+      <div id="reader-book" class="reader-stage"></div>
+      <footer class="reader-foot">
+        <span id="reader-where" class="reader-where"></span>
+        <span id="reader-pageno" class="reader-pageno"></span>
+        <span class="reader-progress"><i id="reader-progress-bar"></i></span>
+      </footer>
+      <div id="listen-bar" class="listen-bar hidden" hidden>
+        <div class="listen-row">
+          <button type="button" id="listen-prev" class="icon" aria-label="上一段音訊">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z" /></svg>
+          </button>
+          <button type="button" id="listen-back30" class="skip" aria-label="倒退 30 秒">−30</button>
+          <button type="button" id="listen-play" class="icon play is-paused" aria-label="播放">
+            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5z" /></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z" /></svg>
+          </button>
+          <button type="button" id="listen-fwd30" class="skip" aria-label="快轉 30 秒">+30</button>
+          <button type="button" id="listen-next" class="icon" aria-label="下一段音訊">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" /></svg>
+          </button>
+        </div>
+        <div class="listen-row listen-meta">
+          <button type="button" id="listen-tracks" class="track-button">
+            <span id="listen-track" class="listen-track">—</span>
+            <span id="listen-time" class="listen-time">0:00</span>
+          </button>
+          <label class="follow"><input type="checkbox" id="listen-follow" checked /> 跟著翻章</label>
+        </div>
+        <span class="listen-progress"><i id="listen-progress-bar"></i></span>
+      </div>
+    </section>
+
+    <div id="toc-sheet" class="sheet hidden" hidden role="dialog" aria-modal="true" aria-labelledby="toc-title">
+      <div class="sheet-card">
+        <h2 id="toc-title">目錄</h2>
+        <ol id="toc-list" class="sheet-list"></ol>
+        <button type="button" class="ghost sheet-close" data-close="toc-sheet">關閉</button>
+      </div>
+    </div>
+
+    <div id="tracks-sheet" class="sheet hidden" hidden role="dialog" aria-modal="true" aria-labelledby="tracks-title">
+      <div class="sheet-card">
+        <h2 id="tracks-title">音訊章節</h2>
+        <p id="align-hint" class="hint"></p>
+        <ol id="tracks-list" class="sheet-list"></ol>
+        <div class="sheet-actions">
+          <button type="button" id="btn-goto-playing" class="ghost">跳到正在聽的章節</button>
+          <button type="button" id="btn-align" class="ghost">把這段音訊對齊到目前章節</button>
+        </div>
+        <button type="button" class="ghost sheet-close" data-close="tracks-sheet">關閉</button>
+      </div>
+    </div>
+
+    <audio id="audio" preload="metadata" playsinline></audio>
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script type="module" src="./app.js?v=1"></script>
+  </body>
+</html>
