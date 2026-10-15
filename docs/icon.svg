@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Library Listen">
+  <!-- Dark tile; pale spines so it never reads as a solid gold square -->
+  <rect width="128" height="128" rx="28" fill="#100e0b"/>
+  <rect x="18" y="26" width="16" height="76" rx="3" fill="#f5f0e1"/>
+  <rect x="40" y="34" width="16" height="68" rx="3" fill="#d8d0bc"/>
+  <rect x="62" y="22" width="16" height="80" rx="3" fill="#efe6d0"/>
+  <!-- amber only on the play control -->
+  <circle cx="100" cy="84" r="18" fill="#e8ad47"/>
+  <polygon points="94,72 94,96 112,84" fill="#1a1208"/>
+</svg>
