@@ -1,0 +1,10 @@
+{
+  "name": "library-read",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "e2e": "playwright test",
+    "serve": "node e2e/server.mjs"
+  }
+}
