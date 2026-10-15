@@ -30,6 +30,22 @@ export function pngSize(bytes) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
+describe("og-image generator stays generic", () => {
+  const src = readFileSync(new URL("../scripts/build-og-image.mjs", import.meta.url), "utf8");
+
+  it("imports nothing but Playwright (no shelf, cover or library modules)", () => {
+    const imports = [...src.matchAll(/^\s*import\s+(?:[^"';]*?\s+from\s+)?["']([^"']+)["']/gm)].map((m) => m[1]);
+    assert.deepEqual(imports, ["@playwright/test"]);
+    assert.doesNotMatch(src, /\bimport\s*\(/, "no dynamic imports");
+  });
+
+  it("does not read shelf data, render covers or embed images", () => {
+    for (const banned of [/covers\.js/, /catalog\.js/, /library\.js/, /coverSvg/, /SERIES\b/, /readFileSync/, /\bfetch\(/, /<img\b/i, /<image\b/i, /<svg\b/i, /\burl\(/]) {
+      assert.doesNotMatch(src, banned, `generator must stay generic: ${banned}`);
+    }
+  });
+});
+
 describe("share previews (Open Graph + Twitter)", () => {
   const pages = htmlPages();
 
