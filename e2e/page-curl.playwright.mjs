@@ -1,7 +1,19 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { SITE, expect, openCover, readerState, shot, startReading, tapNext, test } from "./fixtures.mjs";
 
-const MEDIA = "/cursor/stores/self/media/page-curl";
+const MEDIA = process.env.PAGE_CURL_MEDIA ?? "/cursor/stores/self/media/page-curl";
+
+/** Local review copies. GitHub runners cannot write the agent store, so a denied mkdir must not fail CI. */
+function saveShot(src, name) {
+  if (!MEDIA) return;
+  try {
+    mkdirSync(MEDIA, { recursive: true });
+    copyFileSync(src, `${MEDIA}/${name}`);
+  } catch (err) {
+    if (err?.code === "EACCES" || err?.code === "EPERM" || err?.code === "EROFS") return;
+    throw err;
+  }
+}
 
 async function installLayoutTraps(page) {
   await page.evaluate(() => {
@@ -51,14 +63,13 @@ async function installLayoutTraps(page) {
 }
 
 test("page curl follows a corner, keeps the verso shadow, and tap still turns", async ({ page }, testInfo) => {
-  mkdirSync(MEDIA, { recursive: true });
   await page.goto(SITE);
   await openCover(page, "demo/flip");
   await startReading(page);
   await expect(page.locator("#reader-book")).toContainText("翻");
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const readerShot = await shot(page, testInfo, "curl-reader");
-  copyFileSync(readerShot, `${MEDIA}/${testInfo.project.name}-reader.png`);
+  saveShot(readerShot, `${testInfo.project.name}-reader.png`);
 
   const beforeTap = await readerState(page);
   await tapNext(page);
@@ -141,7 +152,7 @@ test("page curl follows a corner, keeps the verso shadow, and tap still turns", 
   expect(follow.tipY).toBeLessThan(follow.startY - 8);
 
   const midShot = await shot(page, testInfo, "curl-mid-drag");
-  copyFileSync(midShot, `${MEDIA}/${testInfo.project.name}-mid-drag.png`);
+  saveShot(midShot, `${testInfo.project.name}-mid-drag.png`);
 
   const beforeRelease = await readerState(page);
   await page.mouse.up();
