@@ -448,6 +448,7 @@ async function openReader(book, { listen, deepLink = null } = {}) {
   reader.open(epub, readerStart(epub, deepLink));
   if (deepLink) hideLinkBanner();
   renderToc();
+  const saved = textProgress(shelfBook.id);
   if (wantsAudio) {
     if (saved && !heardBefore) {
       // Read before but never listened: start the track that matches the page.
