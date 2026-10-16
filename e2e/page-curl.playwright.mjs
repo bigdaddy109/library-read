@@ -62,6 +62,38 @@ async function installLayoutTraps(page) {
   });
 }
 
+/** Pointer events on the book, one pointerId. page.mouse stops after setPointerCapture on CI WebKit. */
+async function sendPointers(page, events) {
+  await page.locator("#reader-book").evaluate((el, events) => {
+    for (const ev of events) {
+      el.dispatchEvent(
+        new PointerEvent(ev.type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: "touch",
+          isPrimary: true,
+          clientX: ev.x,
+          clientY: ev.y,
+          button: 0,
+          buttons: ev.type === "pointerup" ? 0 : 1,
+        })
+      );
+    }
+  }, events);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+function stroke(x0, y0, x1, y1, from, to, steps) {
+  const points = [];
+  for (let i = 1; i <= steps; i += 1) {
+    const k = from + (to - from) * (i / steps);
+    points.push({ type: "pointermove", x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k });
+  }
+  return points;
+}
+
 test("page curl follows a corner, keeps the verso shadow, and tap still turns", async ({ page }, testInfo) => {
   await page.goto(SITE);
   await openCover(page, "demo/flip");
@@ -84,24 +116,11 @@ test("page curl follows a corner, keeps the verso shadow, and tap still turns", 
   const x1 = box.x + box.width * 0.46;
   const y1 = box.y + box.height * 0.4;
 
-  await page.mouse.move(x0, y0);
-  await page.mouse.down();
-  const steps = 8;
-  for (let i = 1; i <= steps; i += 1) {
-    const k = i / steps;
-    await page.mouse.move(x0 + (x1 - x0) * k * 0.35, y0 + (y1 - y0) * k * 0.35);
-    await page.waitForTimeout(20);
-  }
+  await sendPointers(page, [{ type: "pointerdown", x: x0, y: y0 }, ...stroke(x0, y0, x1, y1, 0, 0.35, 8)]);
   await expect(page.locator("#reader-book.is-turning .curl-root")).toBeVisible();
-  await page.waitForTimeout(40);
   const baseline = await page.evaluate(() => ({ reads: window.__layoutReads, writes: window.__layoutWrites }));
 
-  for (let i = 1; i <= 8; i += 1) {
-    const k = 0.35 + 0.65 * (i / 8);
-    await page.mouse.move(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k);
-    await page.waitForTimeout(32);
-  }
-  await page.waitForTimeout(80);
+  await sendPointers(page, stroke(x0, y0, x1, y1, 0.35, 1, 8));
 
   const during = await page.evaluate(() => {
     const strips = [...document.querySelectorAll("#reader-book .curl-strip")];
@@ -147,15 +166,15 @@ test("page curl follows a corner, keeps the verso shadow, and tap still turns", 
       startY: sy,
     };
   }, { x0, y0, x1, y1 });
-  // The peeled tip moved with the finger (left and up from the grabbed corner).
-  expect(follow.tipX).toBeLessThan(follow.startX - 8);
-  expect(follow.tipY).toBeLessThan(follow.startY - 8);
+  // The peeled tip tracks the finger, not merely the 10px gesture threshold.
+  expect(follow.startX - follow.tipX).toBeGreaterThan((x0 - x1) * 0.45);
+  expect(follow.startY - follow.tipY).toBeGreaterThan((y0 - y1) * 0.45);
 
   const midShot = await shot(page, testInfo, "curl-mid-drag");
   saveShot(midShot, `${testInfo.project.name}-mid-drag.png`);
 
   const beforeRelease = await readerState(page);
-  await page.mouse.up();
+  await sendPointers(page, [{ type: "pointerup", x: x1, y: y1 }]);
   await expect.poll(async () => (await readerState(page)).turning).toBe(false);
   const afterRelease = await readerState(page);
   expect(afterRelease.page + afterRelease.spine * 1000).toBeGreaterThan(beforeTap.page + beforeTap.spine * 1000);
