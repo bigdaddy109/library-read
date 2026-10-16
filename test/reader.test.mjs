@@ -5,11 +5,13 @@ import {
   CURL_STRIPS,
   alignPage,
   applyCurlStyles,
+  classifyGrab,
   curlPose,
   curlRadius,
   fxFromProgress,
   lastStart,
   pageGeometry,
+  releasePlan,
   stepDrag,
   turnTarget,
 } from "../docs/reader.js?v=1";
@@ -102,10 +104,12 @@ describe("page curl", () => {
     assert.equal(pose.strips.length, CURL_STRIPS);
     assert.equal(pose.backShowing, true);
     assert.equal(pose.flap.opacity, "1");
-    assert.ok(Number(pose.flap.shade) > 0.2, "verso shadow");
+    assert.ok(Number(pose.flap.shade) > 0.2 && Number(pose.flap.shade) < 0.75, "paper verso, not a black slab");
     assert.match(pose.flap.transform, /rotateY\(-/);
+    assert.match(pose.flap.transform, /rotateZ\(/);
     assert.ok(Number(pose.shadow.opacity) > 0.05, "cast shadow");
-    assert.equal(pose.lip.opacity, "1");
+    assert.ok(Number(pose.lip.opacity) > 0.85);
+    assert.ok(Number(pose.sheen.opacity) > 0.4, "light on the curl");
     const hidden = pose.strips.filter((s) => s.frontOpacity === "0");
     assert.ok(hidden.length > 0, "peeled text slices drop away");
   });
@@ -131,6 +135,58 @@ describe("page curl", () => {
     assert.ok(Math.abs(pose.corner.y - -20) < 0.01);
   });
 
+  it("bends a corner more than a straight edge, and light follows the angle", () => {
+    const mid = { pageW, pageH, fx: pageW * 0.5, bendY: -48 };
+    const corner = curlPose({ ...mid, corner: "bottom" });
+    const edge = curlPose({ ...mid, corner: "middle" });
+    const cornerTilt = Number(corner.flap.transform.match(/rotateZ\(([-\d.]+)deg\)/)[1]);
+    const edgeTilt = Number(edge.flap.transform.match(/rotateZ\(([-\d.]+)deg\)/)[1]);
+    assert.ok(Math.abs(cornerTilt) > Math.abs(edgeTilt) + 4);
+    const top = curlPose({ ...mid, bendY: 48, corner: "top" });
+    const topTilt = Number(top.flap.transform.match(/rotateZ\(([-\d.]+)deg\)/)[1]);
+    assert.ok(topTilt < 0, "a top corner tilts the other way");
+    const barely = curlPose({ pageW, pageH, fx: pageW * 0.9, bendY: 6, corner: "bottom" });
+    assert.ok(Number(corner.shadow.opacity) > Number(barely.shadow.opacity));
+    assert.ok(Number(corner.flap.shade) > Number(barely.flap.shade));
+    assert.ok(Number(corner.sheen.opacity) > Number(barely.sheen.opacity));
+    assert.ok(Math.abs(Number(corner.flap.transform.match(/rotateY\(([-\d.]+)deg\)/)[1])) > 20);
+  });
+
+  it("follows a left edge and a top corner", () => {
+    const left = stepDrag(
+      { pageW, pageH, dir: -1, x0: 12, y0: 350, leafLeft: 0, grabX: 12, corner: "middle" },
+      { clientX: 160, clientY: 350 }
+    );
+    assert.equal(left.edgeGrab, true);
+    assert.ok(Math.abs(left.fx - 160) < 0.01);
+    const top = stepDrag(
+      { pageW, pageH, dir: 1, x0: pageW * 0.5, y0: 20, leafLeft: 0, grabX: pageW * 0.5, corner: "top" },
+      { clientX: 140, clientY: 180 }
+    );
+    assert.equal(top.edgeGrab, true);
+    assert.ok(Math.abs(top.fx - 140) < 0.01);
+    assert.ok(top.bendY > 100);
+  });
+
+  it("classifies every corner and both side edges", () => {
+    assert.deepEqual(classifyGrab({ x: 360, y: 640, width: 390, height: 700, dx: -20, dy: -30 }), { dir: 1, corner: "bottom" });
+    assert.deepEqual(classifyGrab({ x: 360, y: 40, width: 390, height: 700, dx: -12, dy: 20 }), { dir: 1, corner: "top" });
+    assert.deepEqual(classifyGrab({ x: 16, y: 640, width: 390, height: 700, dx: 20, dy: -10 }), { dir: -1, corner: "bottom" });
+    assert.deepEqual(classifyGrab({ x: 16, y: 30, width: 390, height: 700, dx: 10, dy: 10 }), { dir: -1, corner: "top" });
+    assert.deepEqual(classifyGrab({ x: 370, y: 350, width: 390, height: 700, dx: -4, dy: 2 }), { dir: 1, corner: "middle" });
+    assert.deepEqual(classifyGrab({ x: 14, y: 350, width: 390, height: 700, dx: 4, dy: 1 }), { dir: -1, corner: "middle" });
+    assert.equal(classifyGrab({ x: 200, y: 20, width: 390, height: 700, dx: 0, dy: 12 }).corner, "top");
+    assert.equal(classifyGrab({ x: 180, y: 680, width: 390, height: 700, dx: 0, dy: -8 }).corner, "bottom");
+  });
+
+  it("finishes a long drag and springs a short one back", () => {
+    assert.deepEqual(releasePlan({ p: 0.62, vx: 0, dir: 1 }), { target: 1, spring: false });
+    assert.deepEqual(releasePlan({ p: 0.22, vx: 0, dir: 1 }), { target: 0, spring: true });
+    assert.deepEqual(releasePlan({ p: 0.2, vx: -0.8, dir: 1 }), { target: 1, spring: false });
+    assert.deepEqual(releasePlan({ p: 0.6, vx: 0.9, dir: 1 }), { target: 0, spring: true });
+    assert.deepEqual(releasePlan({ p: 0.2, vx: 0.8, dir: -1 }), { target: 1, spring: false });
+  });
+
   it("drag frames write transform and opacity only", () => {
     const strips = [];
     const writes = [];
@@ -147,8 +203,9 @@ describe("page curl", () => {
     const flap = fakeNode();
     const flapShade = fakeNode();
     const lip = fakeNode();
-    writes.push(shadow, flap, flapShade, lip);
-    const nodes = { strips, shadow, flap, flapShade, lip, originX: 390 };
+    const sheen = fakeNode();
+    writes.push(shadow, flap, flapShade, lip, sheen);
+    const nodes = { strips, shadow, flap, flapShade, lip, sheen, originX: 390 };
     const radius = curlRadius(pageW);
     assert.ok(radius > 0);
     for (let step = 0; step <= 10; step += 1) {

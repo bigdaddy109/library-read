@@ -4,7 +4,7 @@
  * by equal count, else proportionally. A per-book offset (set by the reader
  * with 對齊到這一章) shifts the whole mapping. Pure; safe for Node tests.
  */
-import { chapterMatchCore, spineIndexForChapter } from "./epub.js?v=5";
+import { chapterMatchCore, spineIndexForChapter } from "./epub.js?v=6";
 
 export const ALIGN_KEY = "libraryread.align.v1";
 
