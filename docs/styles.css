@@ -961,41 +961,46 @@ h1 {
   width: 100%;
   height: 100%;
   z-index: 40;
-  transform-origin: 0 70%;
+  transform-origin: 0 100%;
   will-change: transform, opacity;
 }
 
-.curl-flap .curl-back {
+.curl-flap.is-paper .curl-back {
   transform: none;
   background:
-    linear-gradient(90deg, #f8f1e4 0%, #ecd9bc 28%, rgba(92, 64, 38, 0.55) 70%, rgba(36, 26, 16, 0.78) 100%),
-    linear-gradient(#f6ead8, #e7d3b4);
-  box-shadow:
-    inset 10px 0 16px rgba(255, 250, 240, 0.45),
-    6px 12px 20px rgba(28, 25, 20, 0.26);
+    linear-gradient(180deg, rgba(255, 252, 246, 0.7), rgba(255, 248, 236, 0) 18%),
+    linear-gradient(90deg, #fbf6ec 0%, #f4e7d2 58%, #e8d4b6 100%);
+  box-shadow: inset 0 0 0 1px rgba(120, 90, 50, 0.06);
+}
+
+.curl-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 252, 245, 0) 18%, rgba(255, 250, 240, 0.78) 58%, rgba(255, 255, 255, 0.12) 100%);
+  opacity: 0;
+  will-change: opacity;
 }
 
 .curl-lip {
   position: absolute;
   top: 0;
   left: 0;
-  width: 34px;
+  width: 22px;
   height: 100%;
   z-index: 41;
-  transform-origin: 50% 50%;
-  background: linear-gradient(90deg, rgba(28, 25, 20, 0.5), rgba(255, 250, 240, 0.72) 42%, rgba(28, 25, 20, 0.2));
-  box-shadow: 0 10px 22px rgba(28, 25, 20, 0.32);
+  transform-origin: 0 100%;
+  background: linear-gradient(90deg, rgba(90, 62, 32, 0.22), rgba(255, 250, 240, 0.92) 48%, rgba(255, 255, 255, 0.28));
   will-change: transform, opacity;
 }
 
 .curl-back {
   background:
-    linear-gradient(90deg, rgba(28, 25, 20, 0.78) 0%, rgba(28, 25, 20, 0.4) 28%, rgba(214, 190, 156, 0.18) 62%, rgba(255, 248, 236, 0.55) 100%),
-    linear-gradient(#f3e6d0, #e5d2b4);
+    linear-gradient(90deg, rgba(90, 64, 36, 0.16), rgba(244, 232, 210, 0.2) 40%, #f6efe2 100%);
 }
 
 .curl-flap .curl-back-shade {
-  background: linear-gradient(90deg, transparent 0%, rgba(48, 32, 18, 0.18) 38%, rgba(28, 20, 12, 0.82) 100%);
+  background: linear-gradient(90deg, rgba(120, 86, 48, 0.05) 0%, rgba(72, 48, 24, 0.22) 55%, rgba(48, 30, 16, 0.55) 100%);
 }
 
 .curl-front-shade {
