@@ -602,6 +602,7 @@ function makeBook({ collectionFolder, bookFolder, audioFiles, coverFile, ebook }
     id: `${collection.id}/${slug(bookFolder)}`,
     collectionId: collection.id,
     collectionTitle: collection.title,
+    seriesFolder: collectionFolder,
     folder: bookFolder,
     title: meta.title,
     subtitle: meta.subtitle,

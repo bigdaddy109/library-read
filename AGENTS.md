@@ -32,6 +32,19 @@ Pairing rules come from Library Listen's `library.js` (`buildLibrary`) unchanged
 - OAuth Client ID / Picker key: [`docs/drive.js`](docs/drive.js) — the **same** Web client as Library Listen. Its authorized JavaScript origin is `https://bigdaddy109.github.io` (origin only, no path), which already covers `/library-read/`. Local preview: `http://127.0.0.1:8080`.
 - Audio streams through the service worker proxy `./drive-media/<fileId>` (Range-aware, never cached). EPUBs download with the token and are kept in IndexedDB (`library-read` → `ebooks`) so reopening is instant.
 - Storage keys are prefixed `libraryread.` so they never collide with Library Listen on the shared `bigdaddy109.github.io` origin.
+- The GIS access token stays in memory (with `expires_in`). Reading and page turns call `tokenForRead` / `tokenForChapterFetch`, which reuse it or refresh with `prompt: ''`. Only 「用 Google 登入」, 「用 Google 登入並打開」, and 「重新授權」 may call `requestAccessToken({ prompt: 'consent' })`, and only from that tap. A deep link does not call GIS until its button is tapped.
+
+## Deep link
+
+```text
+https://bigdaddy109.github.io/library-read/?series=<series folder>&book=<epub name>&ch=<chapter>
+```
+
+- `series`: Drive Library series folder name, URL-encoded (`Library/<series>/ebooks/…`).
+- `book`: EPUB file name without `.epub`, URL-encoded.
+- `ch`: optional, 1-based text chapter. Omit to open at the start.
+- On load, show 「用 Google 登入並打開」 or, if a token is already cached, 「打開這本書」. Do not call `requestAccessToken` until that tap.
+- If the series or book is missing: stay on the shelf and show 「找不到這本書，已回到書架。」
 
 ## Layout
 
@@ -40,7 +53,8 @@ The site **is** `docs/` (GitHub Pages: `main` `/docs`). Vanilla ES modules, no b
 | File | Role |
 | --- | --- |
 | `docs/index.html`, `docs/styles.css` | Shell: cover wall, book layer, reader, listen bar |
-| `docs/app.js` | Wiring: Drive sign-in, library load + snapshot, open book, SW registration |
+| `docs/app.js` | Wiring: Drive sign-in, library load + snapshot, deep link, open book, SW registration |
+| `docs/link.js` | Deep-link query parse, book match, chapter index. Load does not call GIS |
 | `docs/shelf.js` | Cover wall + `openCoverBook` (zoom → hinge left), ported from Library Listen |
 | `docs/reader.js` | Paginated reader (CSS columns) with page-flip leaf + swipe |
 | `docs/content.js` | EPUB chapter → sanitized DOM (no scripts, no EPUB CSS, zip images as blob URLs) |

@@ -1151,6 +1151,34 @@ h1 {
   width: 100%;
 }
 
+.link-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(0.8rem + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 22;
+  width: min(28rem, calc(100vw - 1.2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px rgba(28, 25, 20, 0.28);
+}
+
+.link-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.link-banner .primary {
+  width: 100%;
+  min-height: 2.75rem;
+}
+
 .toast {
   position: fixed;
   left: 50%;

@@ -16,13 +16,16 @@ export const SILENT_MP3 = readFileSync(new URL("./fixtures/silent-20s.mp3", impo
 /** Fake GIS client: initTokenClient → requestAccessToken → callback with the fixture token. */
 export const FAKE_GIS_SCRIPT = `
 window.__gisRequests = 0;
+window.__gisPrompts = [];
 window.google = window.google || {};
 window.google.accounts = {
   oauth2: {
     initTokenClient(opts) {
       return {
-        requestAccessToken() {
+        requestAccessToken(arg) {
           window.__gisRequests += 1;
+          const prompt = arg && Object.prototype.hasOwnProperty.call(arg, "prompt") ? arg.prompt : "(missing)";
+          window.__gisPrompts.push(prompt);
           setTimeout(() => opts.callback({ access_token: ${JSON.stringify(FIXTURE_TOKEN)}, expires_in: 3600 }), 30);
         },
       };

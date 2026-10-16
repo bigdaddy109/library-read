@@ -8,27 +8,39 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=3";
+} from "./library.js?v=4";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
+  beginInteractiveSignIn,
   classifyDriveError,
+  clearAccessToken,
   clearDriveSession,
   downloadDriveBuffer,
   driveMediaUrl,
   fetchDriveUser,
+  freshAccessToken,
   getAccessToken,
   isGoogleClientConfigured,
   isPickerConfigured,
   loadDriveEntries,
   loadDriveSession,
   openGooglePicker,
+  preloadGoogleIdentity,
   publishDriveToken,
   saveDriveSession,
   signInWithGoogle,
   signOutGoogle,
-} from "./drive.js?v=3";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=3";
+  tokenForRead,
+} from "./drive.js?v=4";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=4";
+import {
+  LINK_MISSING_MESSAGE,
+  createDeepLinkSession,
+  findLinkedBook,
+  parseDeepLink,
+  spineIndexForDeepLink,
+} from "./link.js?v=4";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
@@ -37,9 +49,10 @@ import {
   loadOffset,
   offsetToAlign,
   saveOffset,
+  textChapters,
   textIndexForAudio,
-} from "./listen.js?v=3";
-import { Reader } from "./reader.js?v=3";
+} from "./listen.js?v=4";
+import { Reader } from "./reader.js?v=4";
 import {
   closeBook,
   findShelfBook,
@@ -47,8 +60,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=3";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=3";
+} from "./shelf.js?v=4";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=4";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -57,6 +70,11 @@ const SW_CHECK_MS = 60_000;
 const $ = (id) => document.getElementById(id);
 const els = {
   google: $("btn-google"),
+  reauth: $("btn-reauth"),
+  openLink: $("btn-open-link"),
+  linkBanner: $("link-banner"),
+  linkText: $("link-banner-text"),
+  readerReauth: $("reader-reauth"),
   reload: $("btn-reload"),
   signout: $("btn-signout"),
   status: $("drive-status"),
@@ -88,7 +106,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=3" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=4" },
   demo: true,
 };
 
@@ -104,6 +122,10 @@ const session = {
 
 let swReloading = false;
 let toastTimer = 0;
+let libraryBooks = [];
+let libraryReady = false;
+/** @type {ReturnType<typeof createDeepLinkSession> | null} */
+let linkSession = null;
 
 function showToast(message, ms = 2600) {
   els.toast.textContent = message;
@@ -118,6 +140,7 @@ const DRIVE_MESSAGES_ZH = {
   [DRIVE_ERROR_KIND.noLibrary]: "這個帳號看不到名為 Library 的資料夾。請 Jeff 把 Library 分享（檢視者）給這個帳號。",
   [DRIVE_ERROR_KIND.accessDenied]: "Google 沒有授權讀取 Drive。請用 Jeff 分享過 Library 的帳號登入。",
   [DRIVE_ERROR_KIND.config]: "還沒有設定 Google 登入（docs/drive.js 的 Client ID）。",
+  [DRIVE_ERROR_KIND.reauth]: "需要重新授權才能讀 Google Drive。請按「重新授權」。",
 };
 
 function driveMessage(err) {
@@ -137,6 +160,7 @@ function snapshotBook(book) {
     title: book.title,
     subtitle: book.subtitle || null,
     author: book.author,
+    seriesFolder: book.seriesFolder || "",
     source: "drive",
     ebook: book.ebook
       ? {
@@ -181,6 +205,7 @@ function updateDriveChrome() {
   els.google.classList.toggle("hidden", signedIn);
   els.reload.classList.toggle("hidden", !signedIn);
   els.signout.classList.toggle("hidden", !signedIn && !saved);
+  if (els.openLink && linkSession?.hasTarget()) els.openLink.textContent = linkSession.buttonLabel();
   if (signedIn) {
     els.status.textContent = `已連上 Google Drive${saved?.email ? `（${saved.email}）` : ""}。`;
   } else if (saved) {
@@ -192,13 +217,79 @@ function updateDriveChrome() {
   }
 }
 
+function showReauth() {
+  els.reauth?.classList.remove("hidden");
+  if (els.reauth) els.reauth.hidden = false;
+  els.readerReauth?.classList.remove("hidden");
+  if (els.readerReauth) els.readerReauth.hidden = false;
+}
+
+function hideReauth() {
+  els.reauth?.classList.add("hidden");
+  if (els.reauth) els.reauth.hidden = true;
+  els.readerReauth?.classList.add("hidden");
+  if (els.readerReauth) els.readerReauth.hidden = true;
+}
+
+function showLinkBanner() {
+  const link = linkSession?.target();
+  if (!link || !els.linkBanner) return;
+  els.linkText.textContent = `要打開《${link.book}》（${link.series}）`;
+  els.openLink.textContent = linkSession.buttonLabel();
+  els.linkBanner.classList.remove("hidden");
+  els.linkBanner.hidden = false;
+}
+
+function hideLinkBanner() {
+  els.linkBanner?.classList.add("hidden");
+  if (els.linkBanner) els.linkBanner.hidden = true;
+}
+
+/**
+ * Popup sign-in. Call from a click handler so requestAccessToken runs in that turn.
+ * Later reads use tokenForRead (prompt: '') and never this.
+ */
+function startSignIn(after) {
+  let pending = null;
+  try {
+    if (globalThis.google?.accounts?.oauth2?.initTokenClient) pending = beginInteractiveSignIn();
+  } catch (err) {
+    const msg = driveMessage(err) || "請再按一次「用 Google 登入」。";
+    els.status.textContent = msg;
+    showToast(msg, 4200);
+    return;
+  }
+  const run = pending || signInWithGoogle({ prompt: "consent" });
+  run
+    .then(async (token) => {
+      await publishDriveToken(token);
+      hideReauth();
+      updateDriveChrome();
+      if (after) await after();
+    })
+    .catch((err) => {
+      if (err?.quiet) return;
+      const msg = driveMessage(err);
+      if (err?.reauth) showReauth();
+      if (msg) {
+        els.status.textContent = msg;
+        showToast(msg, 4200);
+      }
+    });
+}
+
+/** Reuse a fresh token, or refresh silently. Never opens a popup. */
 async function ensureToken() {
-  const existing = getAccessToken();
-  if (existing) return existing;
-  const token = await signInWithGoogle();
-  await publishDriveToken(token);
-  updateDriveChrome();
-  return token;
+  try {
+    const token = await tokenForRead();
+    await publishDriveToken(token);
+    hideReauth();
+    updateDriveChrome();
+    return token;
+  } catch (err) {
+    if (err?.reauth) showReauth();
+    throw err;
+  }
 }
 
 async function loadFromDrive({ fresh = false } = {}) {
@@ -225,7 +316,9 @@ async function loadFromDrive({ fresh = false } = {}) {
     return;
   }
   saveLibrarySnapshot(books);
-  setShelfBooks(books.map(snapshotBook), "library");
+  libraryBooks = books.map(snapshotBook);
+  libraryReady = true;
+  setShelfBooks(libraryBooks, "library");
   updateDriveChrome();
   const readable = books.filter(bookHasEbook).length;
   els.status.textContent += ` 共 ${books.length} 本，${readable} 本可以讀。`;
@@ -250,7 +343,37 @@ function progressLine(book) {
   return `讀到：${text.label || "閱讀中"}`;
 }
 
-async function ebookBytes(book) {
+/** Start a silent token fetch in this turn (the tap), before any await. Never a popup. */
+function warmDriveToken(book) {
+  if (!book || book.demo || book.ebook?.url || !book.ebook?.driveId) return null;
+  if (freshAccessToken()) return Promise.resolve(freshAccessToken());
+  return tokenForRead();
+}
+
+async function fetchDriveEbook(id, tokenPromise) {
+  const pull = async (token) => {
+    await publishDriveToken(token);
+    return downloadDriveBuffer(id, token);
+  };
+  try {
+    return await pull(await tokenPromise);
+  } catch (err) {
+    if (err?.reauth) {
+      showReauth();
+      throw err;
+    }
+    if (classifyDriveError(err).kind !== DRIVE_ERROR_KIND.expired) throw err;
+    clearAccessToken();
+    try {
+      return await pull(await tokenForRead());
+    } catch (err2) {
+      if (err2?.reauth) showReauth();
+      throw err2;
+    }
+  }
+}
+
+async function ebookBytes(book, warm) {
   if (book.ebook?.url) {
     const res = await fetch(book.ebook.url);
     if (!res.ok) throw new Error(`demo ${res.status}`);
@@ -260,8 +383,7 @@ async function ebookBytes(book) {
   if (!id) throw new Error("這本書沒有電子書。");
   const cached = await getCachedEbook(id);
   if (cached) return cached;
-  const token = await ensureToken();
-  const bytes = await downloadDriveBuffer(id, token);
+  const bytes = await fetchDriveEbook(id, warm || tokenForRead());
   putCachedEbook(id, bytes, { bookId: book.id, name: book.ebook.name });
   return bytes;
 }
@@ -272,8 +394,22 @@ function trackUrl(ch) {
   return "";
 }
 
-async function openReader(book, { listen }) {
+function readerStart(epub, deepLink) {
+  if (deepLink) {
+    const spine = spineIndexForDeepLink(textChapters(epub.spine), deepLink.chapter);
+    if (deepLink.chapter != null && spine == null) showToast("沒有這個章節，從開頭讀。");
+    return { spineIndex: spine ?? firstTextSpine(epub), fraction: 0 };
+  }
+  const saved = session.book ? textProgress(session.book.id) : null;
+  return {
+    spineIndex: saved ? spineIndexFromCfi(saved.locator) : firstTextSpine(epub),
+    fraction: saved?.fraction || 0,
+  };
+}
+
+async function openReader(book, { listen, deepLink = null } = {}) {
   const shelfBook = findShelfBook(book.id) || book;
+  const warm = warmDriveToken(shelfBook);
   const wantsAudio = listen && bookHasAudio(shelfBook);
   session.book = shelfBook;
   session.listen = wantsAudio;
@@ -291,13 +427,13 @@ async function openReader(book, { listen }) {
   setSpreadStatus("正在打開…");
   let bytes;
   try {
-    bytes = await ebookBytes(shelfBook);
+    bytes = await ebookBytes(shelfBook, warm);
   } catch (err) {
     const msg = driveMessage(err) || "打不開這本電子書。";
     setSpreadStatus(msg);
     showToast(msg, 4200);
     stopAudio();
-    return;
+    return false;
   }
   let epub;
   try {
@@ -305,15 +441,12 @@ async function openReader(book, { listen }) {
   } catch (err) {
     setSpreadStatus(`這個 EPUB 讀不出來：${err.message}`);
     stopAudio();
-    return;
+    return false;
   }
   session.epub = epub;
   showReaderScreen(shelfBook);
-  const saved = textProgress(shelfBook.id);
-  reader.open(epub, {
-    spineIndex: saved ? spineIndexFromCfi(saved.locator) : firstTextSpine(epub),
-    fraction: saved?.fraction || 0,
-  });
+  reader.open(epub, readerStart(epub, deepLink));
+  if (deepLink) hideLinkBanner();
   renderToc();
   if (wantsAudio) {
     if (saved && !heardBefore) {
@@ -332,6 +465,7 @@ async function openReader(book, { listen }) {
     showListenBar(false);
   }
   closeBook();
+  return true;
 }
 
 function firstTextSpine(epub) {
@@ -606,13 +740,18 @@ function bindAudio() {
       return;
     }
     const ch = tracks()[session.trackIndex];
-    if (ch?.driveId && !getAccessToken()) {
-      ensureToken()
+    if (ch?.driveId && !freshAccessToken()) {
+      tokenForRead()
+        .then((token) => publishDriveToken(token))
         .then(() => {
+          hideReauth();
           audio.load();
           return audio.play();
         })
-        .catch((err) => showToast(driveMessage(err) || "沒有開始播放。"));
+        .catch((err) => {
+          if (err?.reauth) showReauth();
+          showToast(driveMessage(err) || "沒有開始播放。");
+        });
       return;
     }
     if (!audio.getAttribute("src")) loadTrack(session.trackIndex);
@@ -717,7 +856,14 @@ function registerSW() {
   });
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== DRIVE_UNAUTHORIZED_MESSAGE) return;
-    showToast(DRIVE_MESSAGES_ZH[DRIVE_ERROR_KIND.expired], 4200);
+    clearAccessToken();
+    tokenForRead()
+      .then((token) => publishDriveToken(token))
+      .then(() => hideReauth())
+      .catch((err) => {
+        if (err?.reauth) showReauth();
+        showToast(DRIVE_MESSAGES_ZH[DRIVE_ERROR_KIND.reauth], 4200);
+      });
   });
 }
 
@@ -730,14 +876,64 @@ const reader = new Reader(els.readerBook, {
   },
 });
 
+function handleLinkResult(result) {
+  if (!result || result.status === "idle" || result.status === "opened") {
+    if (result?.status === "opened") hideLinkBanner();
+    return;
+  }
+  if (result.status === "missing") {
+    hideLinkBanner();
+    if (session.book) closeReader();
+    closeBook();
+    els.status.textContent = result.message || LINK_MISSING_MESSAGE;
+    showToast(result.message || LINK_MISSING_MESSAGE, 4200);
+  }
+}
+
+function onReauthClick() {
+  const retryLink = !!linkSession?.hasTarget();
+  const retryBook = session.book && !session.epub ? session.book : null;
+  const retryListen = session.listen;
+  startSignIn(async () => {
+    showToast("已重新授權。", 1800);
+    if (retryLink) handleLinkResult(await linkSession.activate());
+    else if (retryBook) await openReader(retryBook, { listen: retryListen });
+  });
+}
+
 function bind() {
-  els.google.addEventListener("click", () => runDriveLoad());
+  els.google.addEventListener("click", () => {
+    const openAfter = !!linkSession?.hasTarget();
+    startSignIn(async () => {
+      await loadFromDrive();
+      if (openAfter) handleLinkResult(await linkSession.activate());
+    });
+  });
+  els.reauth?.addEventListener("click", onReauthClick);
+  els.readerReauth?.addEventListener("click", onReauthClick);
+  els.openLink?.addEventListener("click", () => {
+    linkSession
+      ?.activate()
+      .then(handleLinkResult)
+      .catch((err) => {
+        if (err?.quiet) return;
+        if (err?.reauth) showReauth();
+        const msg = driveMessage(err);
+        if (msg) {
+          els.status.textContent = msg;
+          showToast(msg, 4200);
+        }
+      });
+  });
   els.reload.addEventListener("click", () => runDriveLoad());
   els.signout.addEventListener("click", async () => {
     await signOutGoogle();
     await publishDriveToken("");
     clearDriveSession();
     localStorage.removeItem(LIBRARY_KEY);
+    libraryBooks = [];
+    libraryReady = false;
+    hideReauth();
     setShelfBooks([DEMO_BOOK], "demo");
     updateDriveChrome();
   });
@@ -788,12 +984,49 @@ function boot() {
     progressLine,
   });
   const snapshot = loadLibrarySnapshot();
-  if (snapshot.length) setShelfBooks(snapshot, "library");
-  else setShelfBooks([DEMO_BOOK], "demo");
+  if (snapshot.length) {
+    libraryBooks = snapshot;
+    setShelfBooks(snapshot, "library");
+  } else setShelfBooks([DEMO_BOOK], "demo");
+  linkSession = createDeepLinkSession({
+    isSignedIn: () => !!freshAccessToken(),
+    beginInteractiveSignIn,
+    ensureLibrary: async () => {
+      if (libraryReady && freshAccessToken()) return;
+      await loadFromDrive();
+    },
+    findBook: (link) => findLinkedBook(libraryBooks, link),
+    openBook: async (book, { chapter } = {}) => {
+      const ok = await openReader(book, { listen: false, deepLink: { chapter } });
+      if (!ok) {
+        const err = new Error("打不開這本電子書。");
+        err.quiet = true;
+        throw err;
+      }
+    },
+  });
+  const link = parseDeepLink(location.search);
+  if (link) {
+    linkSession.load(link);
+    showLinkBanner();
+  }
   bind();
   bindAudio();
   updateDriveChrome();
   registerSW();
+  if (isGoogleClientConfigured()) {
+    els.google.disabled = true;
+    if (els.openLink) els.openLink.disabled = true;
+    preloadGoogleIdentity()
+      .then(() => {
+        els.google.disabled = false;
+        if (els.openLink) els.openLink.disabled = false;
+      })
+      .catch(() => {
+        els.google.disabled = false;
+        if (els.openLink) els.openLink.disabled = false;
+      });
+  }
   document.documentElement.dataset.ready = shelfSource();
 }
 
