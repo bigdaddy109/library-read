@@ -1,7 +1,7 @@
 /** Shelf helpers: series colours, chips, filter, cover-open motion. Safe to import from Node tests. */
 
-import { bookHasAudio, bookHasEbook } from "./library.js?v=3";
-import { filterBooks, shelfCountLabel, emptySearchMessage, trimQuery } from "./search.js?v=3";
+import { bookHasAudio, bookHasEbook } from "./library.js?v=4";
+import { filterBooks, shelfCountLabel, emptySearchMessage, trimQuery } from "./search.js?v=4";
 
 /**
  * Cover wall → book (same as Library Listen's openCoverBook):

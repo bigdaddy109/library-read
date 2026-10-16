@@ -1,5 +1,5 @@
 /* Shell-only cache. Audio is never cached; EPUB bytes live in IndexedDB, not here. */
-const CACHE = "library-read-shell-v3";
+const CACHE = "library-read-shell-v4";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "libraryread.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "libraryread.drive-unauthorized";
@@ -13,23 +13,24 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=3",
-  "./app.js?v=3",
-  "./library.js?v=3",
-  "./drive.js?v=3",
-  "./search.js?v=3",
-  "./epub.js?v=3",
-  "./catalog.js?v=3",
-  "./covers.js?v=3",
-  "./shelf.js?v=3",
-  "./content.js?v=3",
-  "./reader.js?v=3",
-  "./listen.js?v=3",
-  "./store.js?v=3",
+  "./styles.css?v=4",
+  "./app.js?v=4",
+  "./library.js?v=4",
+  "./link.js?v=4",
+  "./drive.js?v=4",
+  "./search.js?v=4",
+  "./epub.js?v=4",
+  "./catalog.js?v=4",
+  "./covers.js?v=4",
+  "./shelf.js?v=4",
+  "./content.js?v=4",
+  "./reader.js?v=4",
+  "./listen.js?v=4",
+  "./store.js?v=4",
   "./manifest.webmanifest",
-  "./icon.svg?v=3",
-  "./apple-touch-icon.png?v=3",
-  "./sample/demo.epub?v=3",
+  "./icon.svg?v=4",
+  "./apple-touch-icon.png?v=4",
+  "./sample/demo.epub?v=4",
 ];
 
 self.addEventListener("install", (event) => {

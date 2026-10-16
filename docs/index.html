@@ -28,9 +28,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="讀書" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=3" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
     <title>書架 · Library Read</title>
   </head>
   <body class="shell-shelf">
@@ -47,6 +47,7 @@
         <section id="onboarding" class="onboarding">
           <div class="load-row">
             <button type="button" id="btn-google" class="primary large">用 Google 登入</button>
+            <button type="button" id="btn-reauth" class="primary hidden" hidden>重新授權</button>
             <button type="button" id="btn-reload" class="ghost hidden">重新整理書架</button>
             <button type="button" id="btn-signout" class="ghost hidden">登出</button>
           </div>
@@ -86,6 +87,7 @@
       <header class="reader-top">
         <button type="button" id="reader-back" class="ghost">← 書架</button>
         <p id="reader-title" class="reader-title"></p>
+        <button type="button" id="reader-reauth" class="ghost hidden" hidden>重新授權</button>
         <button type="button" id="reader-toc" class="ghost">目錄</button>
         <button type="button" id="reader-font" class="ghost" aria-label="字級">Aa</button>
       </header>
@@ -142,8 +144,12 @@
       </div>
     </div>
 
+    <div id="link-banner" class="link-banner hidden" hidden>
+      <p id="link-banner-text"></p>
+      <button type="button" id="btn-open-link" class="primary">用 Google 登入並打開</button>
+    </div>
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=3"></script>
+    <script type="module" src="./app.js?v=4"></script>
   </body>
 </html>

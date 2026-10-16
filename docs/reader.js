@@ -7,8 +7,8 @@
  * opacity only). Leaf faces come from a small pool of pre-laid-out clones per
  * chapter, so a turn never re-lays out the chapter while it animates.
  */
-import { renderChapter } from "./content.js?v=3";
-import { textChapterForSpine, textChapters } from "./listen.js?v=3";
+import { renderChapter } from "./content.js?v=4";
+import { textChapterForSpine, textChapters } from "./listen.js?v=4";
 
 export const FONT_STEPS = [0.95, 1.08, 1.22, 1.38];
 export const READER_PREFS_KEY = "libraryread.reader.v1";

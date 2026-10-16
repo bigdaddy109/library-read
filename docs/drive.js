@@ -4,7 +4,7 @@
  * are public browser config (not secrets).
  */
 
-import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js?v=3";
+import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js?v=4";
 
 /** Public Web application OAuth Client ID. Not a secret. */
 export const GOOGLE_OAUTH_CLIENT_ID =
@@ -45,6 +45,7 @@ export const DRIVE_ERROR_KIND = {
   expired: "expired",
   noLibrary: "no-library",
   accessDenied: "access-denied",
+  reauth: "reauth",
   generic: "generic",
 };
 
@@ -59,13 +60,22 @@ export const DRIVE_ERROR_MESSAGES = {
     "Google did not grant Drive access. Sign in with an account Jeff shared Library with, or Choose Library folder as a local fallback.",
   cancelled: "Google sign-in was cancelled.",
   coop: "Chrome may log Cross-Origin-Opener-Policy window.closed while the GIS popup is open. That console warning is harmless and does not fail sign-in.",
+  reauth: "Google Drive needs another tap on 重新授權. Reading will not open a popup by itself.",
 };
+
+/** Label for the only control that may open a GIS popup after the first sign-in. */
+export const REAUTH_LABEL = "重新授權";
+const TOKEN_SKEW_MS = 60_000;
 
 const PLACEHOLDER_CLIENT = /YOUR_GOOGLE_OAUTH_CLIENT_ID/i;
 const PLACEHOLDER_PICKER = /YOUR_GOOGLE_PICKER_API_KEY/i;
 
 /** @type {string | null} */
 let accessToken = null;
+/** Epoch ms when `accessToken` stops being safe to send. 0 = none. */
+let tokenExpiresAt = 0;
+/** @type {Promise<string> | null} */
+let gisInflight = null;
 /** @type {((token: string) => void) | null} */
 let rangeFetchImpl = null;
 
@@ -88,7 +98,35 @@ export function getAccessToken() {
 }
 
 export function setAccessToken(token) {
-  accessToken = token || null;
+  if (!token) {
+    accessToken = null;
+    tokenExpiresAt = 0;
+    return null;
+  }
+  if (token === accessToken && tokenExpiresAt) return accessToken;
+  accessToken = token;
+  tokenExpiresAt = Date.now() + 3600 * 1000;
+  return accessToken;
+}
+
+export function clearAccessToken() {
+  accessToken = null;
+  tokenExpiresAt = 0;
+  return null;
+}
+
+/** In-memory token that is still inside its lifetime. Never triggers GIS. */
+export function freshAccessToken(now = Date.now()) {
+  if (!accessToken || !tokenExpiresAt) return null;
+  if (now >= tokenExpiresAt - TOKEN_SKEW_MS) return null;
+  return accessToken;
+}
+
+function applyGisToken(resp) {
+  const seconds = Number(resp?.expires_in);
+  const ttl = Number.isFinite(seconds) && seconds > 0 ? seconds : 3600;
+  accessToken = resp.access_token;
+  tokenExpiresAt = Date.now() + ttl * 1000;
   return accessToken;
 }
 
@@ -236,6 +274,20 @@ export function classifyDriveError(input) {
   }
 
   if (
+    type === "popup_failed_to_open" ||
+    errorCode === "popup_failed_to_open" ||
+    /failed to open popup/i.test(text)
+  ) {
+    return {
+      kind: DRIVE_ERROR_KIND.reauth,
+      name: "DriveReauth",
+      message: DRIVE_ERROR_MESSAGES.reauth,
+      status,
+      reauth: true,
+    };
+  }
+
+  if (
     nameIn === "AbortError" ||
     type === "popup_closed" ||
     errorCode === "popup_closed" ||
@@ -287,6 +339,7 @@ export function driveErrorFrom(input) {
   err.kind = classified.kind;
   err.status = classified.status;
   if (classified.silent) err.silent = true;
+  if (classified.reauth || input?.reauth) err.reauth = true;
   if (input?.candidates) err.candidates = input.candidates;
   return err;
 }
@@ -880,14 +933,44 @@ export function tokenClientOptions(callback, errorCallback) {
   };
 }
 
-export async function signInWithGoogle({ prompt = "consent" } = {}) {
-  requireClientId();
-  await loadScript(GIS_SRC);
-  const gis = globalThis.google?.accounts?.oauth2;
-  if (!gis?.initTokenClient) {
-    throw new Error("Google Identity Services did not load.");
+function gisOauth() {
+  return globalThis.google?.accounts?.oauth2 || null;
+}
+
+/** Load GIS so a later tap can call requestAccessToken in the same turn. Does not request a token. */
+export function preloadGoogleIdentity() {
+  if (gisOauth()?.initTokenClient) return Promise.resolve();
+  return loadScript(GIS_SRC).then(() => {
+    if (!gisOauth()?.initTokenClient) throw new Error("Google Identity Services did not load.");
+  });
+}
+
+function markReauth(err) {
+  const wrapped = err?.kind ? err : driveErrorFrom(err || { message: DRIVE_ERROR_MESSAGES.reauth });
+  wrapped.reauth = true;
+  wrapped.reauthLabel = REAUTH_LABEL;
+  if (!wrapped.kind || wrapped.kind === DRIVE_ERROR_KIND.generic) {
+    wrapped.kind = DRIVE_ERROR_KIND.reauth;
+    wrapped.message = DRIVE_ERROR_MESSAGES.reauth;
   }
-  return new Promise((resolve, reject) => {
+  return wrapped;
+}
+
+/**
+ * Call GIS. `prompt` must already be chosen: "" is silent, "consent" opens a popup.
+ * When the script is loaded this invokes requestAccessToken before returning.
+ */
+function requestGisToken(prompt) {
+  requireClientId();
+  const gis = gisOauth();
+  if (!gis?.initTokenClient) {
+    const err = new Error("Google 登入還沒準備好，請再按一次。");
+    err.name = "DriveConfigError";
+    throw err;
+  }
+  if (gisInflight) return gisInflight;
+  const promptValue = prompt == null ? "consent" : String(prompt);
+  gisInflight = new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn, value) => {
       if (settled) return;
@@ -901,8 +984,7 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
             finish(reject, gisAuthFailure(resp) || driveErrorFrom(resp));
             return;
           }
-          setAccessToken(resp.access_token);
-          finish(resolve, resp.access_token);
+          finish(resolve, applyGisToken(resp));
         },
         (err) => {
           // COOP can make GIS log window.closed; ignore that and keep waiting
@@ -913,17 +995,54 @@ export async function signInWithGoogle({ prompt = "consent" } = {}) {
         }
       )
     );
-    client.requestAccessToken({ prompt });
+    client.requestAccessToken({ prompt: promptValue });
+  }).finally(() => {
+    gisInflight = null;
   });
+  return gisInflight;
+}
+
+/**
+ * Explicit button only (用 Google 登入 / 重新授權 / 打開連結).
+ * Must run inside the click, before any await, so Safari still has the gesture.
+ */
+export function beginInteractiveSignIn() {
+  return requestGisToken("consent");
+}
+
+export async function signInWithGoogle({ prompt = "consent" } = {}) {
+  requireClientId();
+  if (!gisOauth()?.initTokenClient) await preloadGoogleIdentity();
+  return requestGisToken(prompt);
 }
 
 export async function refreshGoogleToken() {
-  return signInWithGoogle({ prompt: "" });
+  requireClientId();
+  if (!gisOauth()?.initTokenClient) await preloadGoogleIdentity();
+  return requestGisToken("");
+}
+
+/**
+ * Token for reading, page turns, and the next chapter fetch.
+ * Reuses a fresh token, or refreshes with prompt:'' (no popup).
+ * If silent refresh fails, rejects with err.reauth and does not open a popup.
+ */
+export function tokenForRead({ now = Date.now() } = {}) {
+  const fresh = freshAccessToken(now);
+  if (fresh) return Promise.resolve(fresh);
+  const silent = () => requestGisToken("").catch((err) => Promise.reject(markReauth(err)));
+  if (gisOauth()?.initTokenClient) return silent();
+  return preloadGoogleIdentity().then(silent).catch((err) => Promise.reject(markReauth(err)));
+}
+
+/** Same policy as tokenForRead. Named for the post-gesture chapter/resource fetch. */
+export function tokenForChapterFetch(opts) {
+  return tokenForRead(opts);
 }
 
 export async function signOutGoogle() {
   const token = accessToken;
-  setAccessToken(null);
+  clearAccessToken();
   try {
     const oauth2 = globalThis.google?.accounts?.oauth2;
     if (token && oauth2?.revoke) {
