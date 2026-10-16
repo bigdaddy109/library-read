@@ -8,7 +8,7 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=4";
+} from "./library.js?v=5";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -32,15 +32,15 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=4";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=4";
+} from "./drive.js?v=5";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=5";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=4";
+} from "./link.js?v=5";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
@@ -51,8 +51,8 @@ import {
   saveOffset,
   textChapters,
   textIndexForAudio,
-} from "./listen.js?v=4";
-import { Reader } from "./reader.js?v=4";
+} from "./listen.js?v=5";
+import { Reader } from "./reader.js?v=5";
 import {
   closeBook,
   findShelfBook,
@@ -60,8 +60,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=4";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=4";
+} from "./shelf.js?v=5";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=5";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -106,7 +106,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=4" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=5" },
   demo: true,
 };
 
