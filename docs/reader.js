@@ -1,14 +1,17 @@
 /**
- * Paginated EPUB reader with a page-flip leaf.
+ * Paginated EPUB reader with a paper page-curl.
  *
  * Text flows into CSS columns one page wide; a page is one column and the
  * flow is moved with translateX. Phones show one page, wide screens a
- * two-page spread. A turn swings a leaf on the spine (rotateY, transform +
- * opacity only). Leaf faces come from a small pool of pre-laid-out clones per
- * chapter, so a turn never re-lays out the chapter while it animates.
+ * two-page spread. A turn peels the sheet around a moving cylinder so the
+ * grabbed corner stays on the finger: the verso faces up with a shadow, and
+ * the page underneath shows through. While a finger is down, each frame
+ * writes only transform and opacity (geometry is cached when the gesture
+ * starts). Leaf faces come from a small pool of pre-laid-out clones per
+ * chapter, sliced into strips once at the start of the turn.
  */
-import { renderChapter } from "./content.js?v=4";
-import { textChapterForSpine, textChapters } from "./listen.js?v=4";
+import { renderChapter } from "./content.js?v=5";
+import { textChapterForSpine, textChapters } from "./listen.js?v=5";
 
 export const FONT_STEPS = [0.95, 1.08, 1.22, 1.38];
 export const READER_PREFS_KEY = "libraryread.reader.v1";
@@ -67,6 +70,124 @@ export function turnTarget({ spineIndex, page, pages, spineCount, spread }, dir)
 
 function ease(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/** Strips in the curl mesh. Built once per turn, then only transformed. */
+export const CURL_STRIPS = 14;
+
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+function cssPx(n) {
+  return `${Math.round(n * 100) / 100}px`;
+}
+
+function cssNum(n) {
+  return String(Math.round(n * 1000) / 1000);
+}
+
+/** How wide the curled lip is. The verso flap is one layer; the text stays in flat slices. */
+export function curlRadius(pageW) {
+  return clamp(pageW * 0.12, 22, 56);
+}
+
+/**
+ * Curl for one frame.
+ * The sheet left of the crease stays flat (so the type is not sliced into a fan).
+ * The peeled part is one verso flap whose tip sits on the finger, bent with
+ * rotateY / rotateZ, plus a lip and a cast shadow at the crease.
+ * `fx` is the free edge in leaf pixels (0 = spine, pageW = flat). Pure: no DOM.
+ */
+export function curlPose({ pageW, pageH, fx, bendY = 0, strips = CURL_STRIPS }) {
+  const edge = clamp(fx, 0, pageW);
+  const peel = pageW - edge;
+  const fold = clamp(edge + peel * 0.46, 0, pageW);
+  const yAt = bendY || 0;
+  const seg = pageW / Math.max(1, strips);
+  const active = peel > 1;
+  const list = [];
+  for (let i = 0; i < strips; i += 1) {
+    const s0 = i * seg;
+    const show = s0 < fold;
+    list.push({
+      transform: `translate3d(${cssPx(s0)}, 0px, 0px) rotateY(0deg)`,
+      frontOpacity: show ? "1" : "0",
+      backOpacity: "0",
+      shade: "0",
+      frontShade: show && fold - s0 < seg ? "0.16" : "0",
+    });
+  }
+  const scale = pageW > 0 ? Math.max(0, fold - edge) / pageW : 0;
+  const curlDeg = -Math.min(28, peel * 0.1);
+  const tilt = clamp(yAt / Math.max(pageW, 1), -0.28, 0.28) * (180 / Math.PI);
+  const lift = Math.min(1, peel / Math.max(1, pageW));
+  return {
+    strips: list,
+    flap: {
+      transform: `translate3d(${cssPx(edge)}, ${cssPx(yAt)}, 18px) rotateZ(${cssNum(tilt)}deg) rotateY(${cssNum(curlDeg)}deg) scaleX(${cssNum(scale)})`,
+      opacity: active ? "1" : "0",
+      shade: cssNum(active ? Math.min(0.92, 0.62 + lift * 0.2) : 0),
+    },
+    lip: {
+      transform: `translate3d(${cssPx(fold - curlRadius(pageW) * 0.35)}, ${cssPx(yAt * 0.22)}, 24px) rotateY(-36deg)`,
+      opacity: active ? "1" : "0",
+    },
+    shadow: {
+      opacity: cssNum(active ? Math.min(0.72, 0.26 + lift * 0.42 + Math.min(0.12, Math.abs(yAt) / Math.max(pageH, 1))) : 0),
+      transform: `translate3d(${cssPx(fold)}, ${cssPx(yAt * 0.18)}, 0px) scaleX(${cssNum(Math.max(0.18, (pageW - fold) / Math.max(pageW, 1)))})`,
+    },
+    corner: { x: edge, y: yAt },
+    fold,
+    backShowing: active,
+  };
+}
+
+/** Map animation progress to the free-edge x. p = 0 is the start of that direction's turn. */
+export function fxFromProgress(p, dir, pageW) {
+  const t = clamp(p, 0, 1);
+  return dir > 0 ? pageW * (1 - t) : pageW * t;
+}
+
+/**
+ * One drag sample. `drag` carries geometry cached at gesture start
+ * (`pageW`, `pageH`, `dir`, `x0`, `leafLeft`, `grabX`). No layout reads.
+ * Grabbing the turning edge sticks the corner to the finger; a swipe
+ * elsewhere moves that edge by the same delta.
+ */
+export function stepDrag(drag, point) {
+  const { pageW, pageH, dir, x0, leafLeft, grabX } = drag;
+  const dx = point.clientX - x0;
+  const dy = point.clientY - (drag.y0 || 0);
+  const fingerX = point.clientX - leafLeft;
+  const edgeGrab = dir > 0 ? grabX >= pageW * 0.55 : grabX <= pageW * 0.45;
+  let fx = edgeGrab ? fingerX : dir > 0 ? pageW + dx : dx;
+  fx = clamp(fx, 0, pageW);
+  const p = dir > 0 ? (pageW - fx) / pageW : fx / pageW;
+  const limit = pageH * 0.55;
+  return { fx, p, bendY: clamp(dy, -limit, limit), edgeGrab };
+}
+
+/** Write one curl frame. Only transform and opacity — never top/left/width/height. */
+export function applyCurlStyles(nodes, pose) {
+  const strips = nodes.strips;
+  for (let i = 0; i < strips.length; i += 1) {
+    const node = strips[i];
+    const poseStrip = pose.strips[i];
+    node.root.style.transform = poseStrip.transform;
+    node.front.style.opacity = poseStrip.frontOpacity;
+    node.back.style.opacity = poseStrip.backOpacity;
+    node.shade.style.opacity = poseStrip.shade;
+    node.frontShade.style.opacity = poseStrip.frontShade;
+  }
+  nodes.flap.style.transform = pose.flap.transform;
+  nodes.flap.style.opacity = pose.flap.opacity;
+  nodes.flapShade.style.opacity = pose.flap.shade;
+  nodes.lip.style.transform = pose.lip.transform;
+  nodes.lip.style.opacity = pose.lip.opacity;
+  const origin = nodes.originX || 0;
+  nodes.shadow.style.transform = `translate3d(${cssPx(origin)},0,0) ${pose.shadow.transform}`;
+  nodes.shadow.style.opacity = pose.shadow.opacity;
 }
 
 function loadPrefs() {
@@ -451,10 +572,76 @@ export class Reader {
     }
     this.flipLayer.classList.add("is-turning");
     this.book.classList.add("is-turning");
-    const turn = { dir, from, roles, p: 0, leafLeft };
+    const turn = { dir, from, roles, p: 0, leafLeft, bendY: 0, dragging: false };
     this.turning = turn;
+    this.mountCurl(turn);
     this.applyTurn(0);
     return turn;
+  }
+
+  /** Slice the outgoing/incoming face into a strip mesh. Once per turn, not per frame. */
+  mountCurl(turn) {
+    const front = turn.roles.front;
+    if (!front || !this.geo) return;
+    const pageW = this.geo.pageW;
+    const n = CURL_STRIPS;
+    const seg = pageW / n;
+    const root = document.createElement("div");
+    root.className = "curl-root";
+    root.style.width = `${pageW}px`;
+    root.style.transform = `translate3d(${turn.leafLeft}px,0,0)`;
+    const strips = [];
+    for (let i = 0; i < n; i += 1) {
+      const el = document.createElement("div");
+      el.className = "curl-strip";
+      el.style.width = `${seg + 2}px`;
+      el.style.zIndex = String(8 + i);
+      const frontWrap = document.createElement("div");
+      frontWrap.className = "curl-front";
+      const slice = front.el.cloneNode(true);
+      slice.classList.add("is-on");
+      slice.style.visibility = "visible";
+      slice.style.opacity = "1";
+      slice.style.left = "0px";
+      slice.style.top = "0px";
+      slice.style.zIndex = "auto";
+      slice.style.width = `${pageW}px`;
+      slice.style.transform = `translate3d(${-i * seg}px,0,0)`;
+      frontWrap.appendChild(slice);
+      const frontShade = document.createElement("span");
+      frontShade.className = "face-shade curl-front-shade";
+      frontWrap.appendChild(frontShade);
+      const back = document.createElement("div");
+      back.className = "curl-back";
+      const shade = document.createElement("span");
+      shade.className = "face-shade curl-back-shade";
+      back.appendChild(shade);
+      el.append(frontWrap, back);
+      root.appendChild(el);
+      strips.push({ root: el, front: frontWrap, back, shade, frontShade });
+    }
+    const flap = document.createElement("div");
+    flap.className = "curl-flap";
+    const flapBack = document.createElement("div");
+    flapBack.className = "curl-back";
+    const flapShade = document.createElement("span");
+    flapShade.className = "face-shade curl-back-shade";
+    flapBack.appendChild(flapShade);
+    flap.appendChild(flapBack);
+    const lip = document.createElement("div");
+    lip.className = "curl-lip";
+    root.append(flap, lip);
+    this.flipLayer.appendChild(root);
+    // The mesh replaces these faces. Drop is-on so a visibility check finds a strip, not an empty card.
+    front.el.classList.remove("is-on");
+    front.el.style.visibility = "hidden";
+    if (turn.roles.back) {
+      turn.roles.back.el.classList.remove("is-on");
+      turn.roles.back.el.style.visibility = "hidden";
+    }
+    this.paperBack.style.opacity = "0";
+    turn.nodes = { root, strips, flap, flapShade, lip, shadow: this.turnShadow, originX: turn.leafLeft };
+    turn.fx = fxFromProgress(0, turn.dir, pageW);
   }
 
   /** p = 0 → leaf where it starts; p = 1 → leaf landed. */
@@ -462,23 +649,21 @@ export class Reader {
     const t = this.turning;
     if (!t) return;
     t.p = p;
-    const angle = t.dir > 0 ? -180 * p : -180 * (1 - p);
-    const W = this.geo.pageW;
-    const frontOn = angle > -90;
-    const { front, back } = t.roles;
-    if (front) {
-      front.el.style.transform = `rotateY(${angle}deg)`;
-      front.el.style.opacity = frontOn ? "1" : "0";
-      front.shade.style.opacity = String(Math.min(0.32, Math.abs(angle) / 90 * 0.32));
-    }
-    const backEl = back ? back.el : this.paperBack;
-    backEl.style.transform = `rotateY(${angle}deg) translateX(${W}px) rotateY(180deg)`;
-    backEl.style.opacity = frontOn ? "0" : "1";
-    const backShade = back ? back.shade : this.paperBack.firstElementChild;
-    backShade.style.opacity = String(Math.min(0.3, (180 + angle) / 90 * 0.3));
-    const lift = Math.sin((Math.PI * Math.abs(angle)) / 180);
-    this.turnShadow.style.left = `${t.leafLeft}px`;
-    this.turnShadow.style.opacity = String(0.55 * lift);
+    if (!t.dragging) t.fx = fxFromProgress(p, t.dir, this.geo.pageW);
+    this.paintCurl();
+  }
+
+  /* per-frame drag paint: transform and opacity only */
+  paintCurl() {
+    const t = this.turning;
+    if (!t?.nodes || !this.geo) return;
+    const pose = curlPose({
+      pageW: this.geo.pageW,
+      pageH: this.geo.height,
+      fx: t.fx,
+      bendY: t.bendY || 0,
+    });
+    applyCurlStyles(t.nodes, pose);
   }
 
   endTurn(committed) {
@@ -491,11 +676,15 @@ export class Reader {
       role.el.classList.remove("is-on");
       role.el.style.transform = "";
       role.el.style.opacity = "";
+      role.el.style.visibility = "";
     }
     this.paperBack.classList.remove("is-on");
+    this.paperBack.style.opacity = "";
+    t.nodes?.root?.remove();
     this.flipLayer.classList.remove("is-turning");
     this.book.classList.remove("is-turning");
     this.turnShadow.style.opacity = "0";
+    this.turnShadow.style.transform = "";
     if (!committed) {
       if (t.from.spineIndex !== this.spineIndex) this.renderSpine(t.from.spineIndex);
       this.page = t.from.page;
@@ -512,13 +701,16 @@ export class Reader {
   animateTo(target, ms) {
     const t = this.turning;
     if (!t) return Promise.resolve();
+    t.dragging = false;
     const start = t.p;
+    const startBend = t.bendY || 0;
     const span = target - start;
     const duration = Math.max(90, ms * Math.abs(span));
     return new Promise((resolve) => {
       const t0 = performance.now();
       t.done = () => {
         cancelAnimationFrame(t.raf);
+        t.bendY = 0;
         this.applyTurn(target);
         this.endTurn(target === 1);
         resolve();
@@ -526,7 +718,9 @@ export class Reader {
       const frame = (now) => {
         if (this.turning !== t) return;
         const k = Math.min(1, (now - t0) / duration);
-        this.applyTurn(start + span * ease(k));
+        const eased = ease(k);
+        t.bendY = startBend * (1 - eased);
+        this.applyTurn(start + span * eased);
         if (k < 1) t.raf = requestAnimationFrame(frame);
         else t.done();
       };
@@ -558,41 +752,82 @@ export class Reader {
 
   /* ---------- input ---------- */
 
+  /** Gesture start only. Later move events go through stepDrag + paintCurl. */
+  beginDrag(d, e) {
+    const dx = e.clientX - d.x0;
+    const dy = e.clientY - d.y0;
+    if (Math.hypot(dx, dy) < 10) return;
+    this.finishTurn();
+    // A sideways drag picks the direction. A steep pull from a corner peels that side.
+    const localX = d.x0 - d.bookLeft;
+    const dir =
+      Math.abs(dx) >= 8 && Math.abs(dx) >= Math.abs(dy) * 0.55 ? (dx < 0 ? 1 : -1) : localX > d.bookWidth * 0.5 ? 1 : -1;
+    const turn = this.prepareTurn(dir);
+    if (!turn) {
+      this.drag = null;
+      this.hooks.onEdge?.(dir);
+      return;
+    }
+    d.turn = turn;
+    d.dir = dir;
+    d.pageW = this.geo.pageW;
+    d.pageH = this.geo.height;
+    d.leafLeft = d.bookLeft + turn.leafLeft;
+    d.grabX = d.x0 - d.leafLeft;
+    try {
+      this.book.setPointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+    this.queueDrag(d, e);
+  }
+
+  /* per-frame drag: cached geometry + pointer coords, then transform/opacity */
+  queueDrag(d, e) {
+    if (this.turning !== d.turn) return;
+    const sample = stepDrag(d, e);
+    d.turn.fx = sample.fx;
+    d.turn.p = sample.p;
+    d.turn.bendY = sample.bendY;
+    d.turn.dragging = true;
+    cancelAnimationFrame(d.raf);
+    d.raf = requestAnimationFrame(() => {
+      if (this.turning !== d.turn) return;
+      this.paintCurl();
+    });
+  }
+
   bindInput() {
     const el = this.book;
     el.addEventListener("pointerdown", (e) => {
       if (e.button > 0 || !this.epub) return;
-      this.drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), turn: null, lastX: e.clientX, lastT: performance.now(), vx: 0 };
+      const rect = el.getBoundingClientRect();
+      this.drag = {
+        id: e.pointerId,
+        x0: e.clientX,
+        y0: e.clientY,
+        t0: performance.now(),
+        turn: null,
+        lastX: e.clientX,
+        lastT: performance.now(),
+        vx: 0,
+        bookLeft: rect.left,
+        bookTop: rect.top,
+        bookWidth: rect.width,
+      };
     });
     el.addEventListener("pointermove", (e) => {
       const d = this.drag;
       if (!d || d.id !== e.pointerId) return;
-      const dx = e.clientX - d.x0;
-      const dy = e.clientY - d.y0;
       const now = performance.now();
       d.vx = (e.clientX - d.lastX) / Math.max(1, now - d.lastT);
       d.lastX = e.clientX;
       d.lastT = now;
       if (!d.turn) {
-        if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy)) return;
-        this.finishTurn();
-        d.turn = this.prepareTurn(dx < 0 ? 1 : -1);
-        if (!d.turn) {
-          this.drag = null;
-          this.hooks.onEdge?.(dx < 0 ? 1 : -1);
-          return;
-        }
-        try {
-          el.setPointerCapture(e.pointerId);
-        } catch {
-          /* already released */
-        }
+        this.beginDrag(d, e);
+        return;
       }
-      if (this.turning !== d.turn) return;
-      const width = this.spread ? this.geo.pageW * 2 : this.geo.pageW;
-      const p = Math.min(1, Math.max(0, (d.turn.dir > 0 ? -dx : dx) / (width * 0.9)));
-      cancelAnimationFrame(d.raf);
-      d.raf = requestAnimationFrame(() => this.applyTurn(p));
+      this.queueDrag(d, e);
     });
     const up = (e) => {
       const d = this.drag;
