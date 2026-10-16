@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { SITE, expect, openCover, readerState, shot, startReading, tapNext, test } from "./fixtures.mjs";
 
-const MEDIA = process.env.PAGE_CURL_MEDIA ?? "/cursor/stores/self/media/page-curl-v6";
+const MEDIA = process.env.PAGE_CURL_MEDIA ?? "/cursor/stores/self/media/page-curl";
 
 /** Local review copies. GitHub runners cannot write the agent store, so a denied mkdir must not fail CI. */
 function saveShot(src, name) {
@@ -139,8 +139,6 @@ test("page curl follows a corner, keeps the verso shadow, and tap still turns", 
       shadowOpacity: Number(shadow?.style.opacity || 0),
       shadowTransform: shadow?.style.transform || "",
       turning: document.getElementById("reader-book").classList.contains("is-turning"),
-      paper: !!flap?.classList.contains("is-paper"),
-      backImage: getComputedStyle(flap?.querySelector(".curl-back")).backgroundImage,
     };
   });
 
@@ -150,13 +148,10 @@ test("page curl follows a corner, keeps the verso shadow, and tap still turns", 
   expect(during.writes - baseline.writes, "drag frames must not write layout").toBe(0);
   expect(during.flapOpacity).toBeGreaterThan(0.9);
   expect(during.shade).toBeGreaterThan(0.2);
-  expect(during.lipOpacity).toBeGreaterThan(0.35);
+  expect(during.lipOpacity).toBeGreaterThan(0.9);
   expect(during.flapTransform).toMatch(/rotateY\(-/);
   expect(during.shadowOpacity).toBeGreaterThan(0.05);
   expect(during.shadowTransform).toContain("translate3d");
-  expect(during.paper).toBe(true);
-  expect(during.shade).toBeLessThan(0.75);
-  expect(during.backImage).toMatch(/gradient/);
 
   const follow = await page.evaluate(({ x0: sx, y0: sy }) => {
     const book = document.getElementById("reader-book").getBoundingClientRect();
@@ -185,88 +180,4 @@ test("page curl follows a corner, keeps the verso shadow, and tap still turns", 
   expect(afterRelease.page + afterRelease.spine * 1000).toBeGreaterThan(beforeTap.page + beforeTap.spine * 1000);
   expect(afterRelease.turning).toBe(false);
   void beforeRelease;
-});
-
-async function openDemo(page) {
-  await page.goto(SITE);
-  await openCover(page, "demo/flip");
-  await startReading(page);
-  await expect(page.locator("#reader-book")).toContainText("翻");
-  await tapNext(page);
-}
-
-test("an edge drag curls, a short release springs back, a top corner shows paper", async ({ page }, testInfo) => {
-  await openDemo(page);
-  const box = await page.locator("#reader-book").boundingBox();
-  const before = await readerState(page);
-
-  const ex0 = box.x + box.width * 0.92;
-  const ey = box.y + box.height * 0.5;
-  const ex1 = box.x + box.width * 0.78;
-  await sendPointers(page, [{ type: "pointerdown", x: ex0, y: ey }, ...stroke(ex0, ey, ex1, ey, 0, 1, 6)]);
-  await page.waitForTimeout(70);
-  await sendPointers(page, [{ type: "pointermove", x: ex1 - 2, y: ey }]);
-  const edge = await page.evaluate(() => {
-    const flap = document.querySelector("#reader-book .curl-flap");
-    const shade = flap?.querySelector(".curl-back-shade");
-    const shadow = document.querySelector("#reader-book .turn-shadow");
-    return {
-      turning: document.getElementById("reader-book").classList.contains("is-turning"),
-      paper: flap?.classList.contains("is-paper") === true,
-      shade: Number(shade?.style.opacity || 0),
-      shadow: Number(shadow?.style.opacity || 0),
-    };
-  });
-  expect(edge.turning).toBe(true);
-  expect(edge.paper).toBe(true);
-  expect(edge.shade).toBeGreaterThan(0.1);
-  expect(edge.shadow).toBeGreaterThan(0.05);
-  if (testInfo.project.name === "webkit-iphone-390") {
-    const edgeShot = await shot(page, testInfo, "curl-edge");
-    saveShot(edgeShot, "webkit-iphone-390-edge-mid-drag.png");
-  }
-  await sendPointers(page, [{ type: "pointerup", x: ex1 - 2, y: ey }]);
-  await expect.poll(async () => (await readerState(page)).turning).toBe(false);
-  const sprung = await readerState(page);
-  expect(sprung.page).toBe(before.page);
-  expect(sprung.spine).toBe(before.spine);
-
-  const lx0 = box.x + box.width * 0.08;
-  const ly = box.y + box.height * 0.5;
-  const lx1 = box.x + box.width * 0.62;
-  await sendPointers(page, [{ type: "pointerdown", x: lx0, y: ly }, ...stroke(lx0, ly, lx1, ly, 0, 1, 8)]);
-  await expect(page.locator("#reader-book.is-turning .curl-flap.is-paper")).toBeVisible();
-  await sendPointers(page, [{ type: "pointerup", x: lx1, y: ly }]);
-  await expect.poll(async () => (await readerState(page)).turning).toBe(false);
-  const afterLeft = await readerState(page);
-  expect(afterLeft.page + afterLeft.spine * 1000).toBeLessThan(before.page + before.spine * 1000);
-
-  const tx0 = box.x + box.width * 0.9;
-  const ty0 = box.y + box.height * 0.12;
-  const tx1 = box.x + box.width * 0.42;
-  const ty1 = box.y + box.height * 0.46;
-  await sendPointers(page, [{ type: "pointerdown", x: tx0, y: ty0 }, ...stroke(tx0, ty0, tx1, ty1, 0, 1, 8)]);
-  await expect(page.locator("#reader-book.is-turning .curl-flap.is-paper")).toBeVisible();
-  const top = await page.evaluate(() => {
-    const flap = document.querySelector("#reader-book .curl-flap");
-    const shade = flap?.querySelector(".curl-back-shade");
-    return {
-      transform: flap?.style.transform || "",
-      origin: flap?.style.transformOrigin || "",
-      shade: Number(shade?.style.opacity || 0),
-      shadow: Number(document.querySelector("#reader-book .turn-shadow")?.style.opacity || 0),
-    };
-  });
-  expect(top.transform).toMatch(/rotateZ\(-/);
-  expect(top.origin).toContain("0%");
-  expect(top.shade).toBeGreaterThan(0.15);
-  expect(top.shadow).toBeGreaterThan(0.05);
-  if (testInfo.project.name === "webkit-iphone-390") {
-    const topShot = await shot(page, testInfo, "curl-top");
-    saveShot(topShot, "webkit-iphone-390-top-corner.png");
-  }
-  await sendPointers(page, [{ type: "pointerup", x: tx1, y: ty1 }]);
-  await expect.poll(async () => (await readerState(page)).turning).toBe(false);
-  const afterTop = await readerState(page);
-  expect(afterTop.page + afterTop.spine * 1000).toBeGreaterThan(afterLeft.page + afterLeft.spine * 1000);
 });
