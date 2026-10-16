@@ -4,7 +4,7 @@
  * event handlers, forms, iframes and the book's own CSS never reach the page.
  * Zip images become blob: URLs (the caller revokes them).
  */
-import { mimeForPath, zipPath } from "./epub.js?v=6";
+import { mimeForPath, zipPath } from "./epub.js?v=7";
 
 export const ALLOWED_TAGS = new Set([
   "a", "abbr", "address", "article", "aside", "b", "bdi", "bdo", "blockquote", "br",
