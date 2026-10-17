@@ -2,22 +2,27 @@
  * Paginated EPUB reader with a paper page-curl.
  *
  * Text flows into CSS columns one page wide; a page is one column and the
- * flow is moved with translateX. Phones show one page, wide screens a
- * two-page spread. A turn peels the sheet around a moving cylinder so the
- * grabbed corner stays on the finger: the verso faces up with a shadow, and
- * the page underneath shows through. While a finger is down, each frame
- * writes only transform and opacity (geometry is cached when the gesture
- * starts). Leaf faces come from a small pool of pre-laid-out clones per
- * chapter, sliced into strips once at the start of the turn.
+ * flow is moved with translateX. Phones show one page. A wide screen shows a
+ * two-page spread whose turn hinges on the center gutter, so the sheet can
+ * cross onto the facing page. A drag sets the progress and can be held there.
+ * Releasing past the threshold, or a flick, finishes the turn; a short release
+ * springs back. A tap plays the whole turn. 快速換頁 skips the curl for a
+ * short fade. While a finger is down, each frame writes only transform and
+ * opacity (geometry is cached when the gesture starts). Leaf faces come from
+ * a small pool of pre-laid-out clones per chapter, sliced into strips once
+ * at the start of the turn.
  */
-import { renderChapter } from "./content.js?v=7";
-import { textChapterForSpine, textChapters } from "./listen.js?v=7";
+import { renderChapter } from "./content.js?v=8";
+import { textChapterForSpine, textChapters } from "./listen.js?v=8";
 
 export const FONT_STEPS = [0.95, 1.08, 1.22, 1.38];
 export const READER_PREFS_KEY = "libraryread.reader.v1";
 export const TURN_MS = 460;
+export const FAST_FADE_MS = 160;
 const DRAG_COMMIT = 0.28;
 const FLICK_PX_PER_MS = 0.35;
+/** A pause this long drops flick speed, so a held page stays until release. */
+export const HOLD_MS = 90;
 
 /** Page geometry for a book box. Pure; exported for tests. */
 export function pageGeometry(width, height, { spreadMinWidth = 760 } = {}) {
@@ -101,6 +106,7 @@ export function curlRadius(pageW) {
  */
 export function curlPose({ pageW, pageH, fx, bendY = 0, strips = CURL_STRIPS }) {
   const edge = clamp(fx, 0, pageW);
+  const flapX = fx < 0 ? fx : edge;
   const peel = pageW - edge;
   const fold = clamp(edge + peel * 0.46, 0, pageW);
   const yAt = bendY || 0;
@@ -125,7 +131,7 @@ export function curlPose({ pageW, pageH, fx, bendY = 0, strips = CURL_STRIPS }) 
   return {
     strips: list,
     flap: {
-      transform: `translate3d(${cssPx(edge)}, ${cssPx(yAt)}, 18px) rotateZ(${cssNum(tilt)}deg) rotateY(${cssNum(curlDeg)}deg) scaleX(${cssNum(scale)})`,
+      transform: `translate3d(${cssPx(flapX)}, ${cssPx(yAt)}, 18px) rotateZ(${cssNum(tilt)}deg) rotateY(${cssNum(curlDeg)}deg) scaleX(${cssNum(scale)})`,
       opacity: active ? "1" : "0",
       shade: cssNum(active ? Math.min(0.92, 0.62 + lift * 0.2) : 0),
     },
@@ -137,16 +143,52 @@ export function curlPose({ pageW, pageH, fx, bendY = 0, strips = CURL_STRIPS }) 
       opacity: cssNum(active ? Math.min(0.72, 0.26 + lift * 0.42 + Math.min(0.12, Math.abs(yAt) / Math.max(pageH, 1))) : 0),
       transform: `translate3d(${cssPx(fold)}, ${cssPx(yAt * 0.18)}, 0px) scaleX(${cssNum(Math.max(0.18, (pageW - fold) / Math.max(pageW, 1)))})`,
     },
-    corner: { x: edge, y: yAt },
+    corner: { x: flapX, y: yAt },
     fold,
     backShowing: active,
   };
 }
 
-/** Map animation progress to the free-edge x. p = 0 is the start of that direction's turn. */
-export function fxFromProgress(p, dir, pageW) {
+/**
+ * Hinge x inside the book. A phone leaf starts at the outer edge.
+ * A spread leaf starts on the center gutter.
+ */
+export function leafAnchor(spread, pageW) {
+  return spread ? pageW : 0;
+}
+
+/**
+ * Map animation progress to the free-edge x. p = 0 is flat.
+ * On a forward spread, p = 1 has crossed the gutter onto the facing page
+ * (`crossGutter`). A phone turn still ends at the spine (x = 0).
+ */
+export function fxFromProgress(p, dir, pageW, crossGutter = false) {
   const t = clamp(p, 0, 1);
+  if (crossGutter && dir > 0) return pageW * (1 - 2 * t);
   return dir > 0 ? pageW * (1 - t) : pageW * t;
+}
+
+/**
+ * Drag progress uses one page width, so a flick or a short pull can finish
+ * the turn. A forward spread then plays that progress across both pages.
+ */
+export function settleProgress(p, { spread = false, dir = 1 } = {}) {
+  const t = Number(p) || 0;
+  if (spread && dir > 0) return clamp(t / 2, 0, 1);
+  return clamp(t, 0, 1);
+}
+
+/** Release after a drag. A held finger does not count as a flick. */
+export function releaseDecision({ p = 0, flick = 0, held = false } = {}) {
+  const flung = !held && flick > FLICK_PX_PER_MS;
+  if (flung || p > DRAG_COMMIT) return "commit";
+  return "spring";
+}
+
+/** Curl stays the default. Only an explicit fast value turns the curl off. */
+export function normalizePrefs(raw) {
+  const font = Number.isInteger(raw?.font) ? raw.font : 1;
+  return { font, turn: raw?.turn === "fast" ? "fast" : "curl" };
 }
 
 /**
@@ -162,7 +204,8 @@ export function stepDrag(drag, point) {
   const fingerX = point.clientX - leafLeft;
   const edgeGrab = dir > 0 ? grabX >= pageW * 0.55 : grabX <= pageW * 0.45;
   let fx = edgeGrab ? fingerX : dir > 0 ? pageW + dx : dx;
-  fx = clamp(fx, 0, pageW);
+  const cross = !!drag.spread && dir > 0;
+  fx = clamp(fx, cross ? -pageW : 0, pageW);
   const p = dir > 0 ? (pageW - fx) / pageW : fx / pageW;
   const limit = pageH * 0.55;
   return { fx, p, bendY: clamp(dy, -limit, limit), edgeGrab };
@@ -192,10 +235,9 @@ export function applyCurlStyles(nodes, pose) {
 
 function loadPrefs() {
   try {
-    const raw = JSON.parse(localStorage.getItem(READER_PREFS_KEY) || "{}");
-    return { font: Number.isInteger(raw.font) ? raw.font : 1 };
+    return normalizePrefs(JSON.parse(localStorage.getItem(READER_PREFS_KEY) || "{}"));
   } catch {
-    return { font: 1 };
+    return normalizePrefs(null);
   }
 }
 
@@ -242,6 +284,7 @@ export class Reader {
     this.paperBack = book.querySelector(".leaf-paper");
     this.turnShadow = book.querySelector(".turn-shadow");
     this.applyFont();
+    this.applyTurnMode();
     this.bindInput();
     this.resizeObserver = new ResizeObserver(() => this.scheduleRelayout());
     this.resizeObserver.observe(book);
@@ -249,6 +292,10 @@ export class Reader {
 
   get spread() {
     return !!this.geo?.spread;
+  }
+
+  get turnMode() {
+    return this.prefs.turn === "fast" ? "fast" : "curl";
   }
 
   /** @param {{ spine: object[], read(path: string): Uint8Array|null }} epub */
@@ -316,6 +363,7 @@ export class Reader {
     s.setProperty("--col-gap", `${geo.gap}px`);
     s.setProperty("--viewport-w", `${geo.viewportW}px`);
     this.book.classList.toggle("is-spread", geo.spread);
+    this.book.dataset.hinge = geo.spread ? "gutter" : "edge";
     this.flipLayer.style.perspective = `${Math.round(geo.pageW * (geo.spread ? 3.2 : 2.6))}px`;
   }
 
@@ -352,6 +400,19 @@ export class Reader {
     const step = Math.min(FONT_STEPS.length - 1, Math.max(0, this.prefs.font));
     this.prefs.font = step;
     this.book.style.setProperty("--reader-font", `${FONT_STEPS[step]}rem`);
+  }
+
+  applyTurnMode() {
+    this.book.classList.toggle("is-fast", this.turnMode === "fast");
+  }
+
+  /** Curl is the default. Fast is a short fade with no page curl. */
+  toggleFastTurn() {
+    this.finishTurn();
+    this.prefs.turn = this.turnMode === "fast" ? "curl" : "fast";
+    savePrefs(this.prefs);
+    this.applyTurnMode();
+    return this.turnMode;
   }
 
   cycleFont() {
@@ -556,7 +617,7 @@ export class Reader {
     }
 
     const g = this.geo;
-    const leafLeft = spread ? g.pageW : 0;
+    const leafLeft = leafAnchor(spread, g.pageW);
     const place = (face, left, z) => {
       if (!face) return;
       face.el.style.left = `${left}px`;
@@ -649,7 +710,7 @@ export class Reader {
     const t = this.turning;
     if (!t) return;
     t.p = p;
-    if (!t.dragging) t.fx = fxFromProgress(p, t.dir, this.geo.pageW);
+    if (!t.dragging) t.fx = fxFromProgress(p, t.dir, this.geo.pageW, !!(this.spread && t.dir > 0));
     this.paintCurl();
   }
 
@@ -733,8 +794,35 @@ export class Reader {
     else if (this.turning) this.endTurn(true);
   }
 
+  /** Page change with no curl: the new page fades in. */
+  fastTurn(dir) {
+    if (!this.epub) return Promise.resolve(false);
+    const target = turnTarget(
+      { spineIndex: this.spineIndex, page: this.page, pages: this.pages, spineCount: this.spine.length, spread: this.spread },
+      dir
+    );
+    if (!target) {
+      this.hooks.onEdge?.(dir);
+      this.book.classList.remove("is-edge");
+      void this.book.offsetWidth;
+      this.book.classList.add("is-edge");
+      return Promise.resolve(false);
+    }
+    if (target.spineIndex !== this.spineIndex) this.renderSpine(target.spineIndex);
+    this.page = target.page === "end" ? lastStart(this.pages, this.spread) : target.page;
+    this.applyPage();
+    this.emit();
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      this.book.classList.remove("is-fast-turn");
+      void this.book.offsetWidth;
+      this.book.classList.add("is-fast-turn");
+    }
+    return Promise.resolve(true);
+  }
+
   turn(dir) {
     this.finishTurn();
+    if (this.turnMode === "fast") return this.fastTurn(dir);
     const t = this.prepareTurn(dir);
     if (!t) {
       this.hooks.onEdge?.(dir);
@@ -757,6 +845,7 @@ export class Reader {
     const dx = e.clientX - d.x0;
     const dy = e.clientY - d.y0;
     if (Math.hypot(dx, dy) < 10) return;
+    if (this.turnMode === "fast") return;
     this.finishTurn();
     // A sideways drag picks the direction. A steep pull from a corner peels that side.
     const localX = d.x0 - d.bookLeft;
@@ -770,6 +859,7 @@ export class Reader {
     }
     d.turn = turn;
     d.dir = dir;
+    d.spread = this.spread;
     d.pageW = this.geo.pageW;
     d.pageH = this.geo.height;
     d.leafLeft = d.bookLeft + turn.leafLeft;
@@ -836,14 +926,26 @@ export class Reader {
       cancelAnimationFrame(d.raf);
       if (d.turn) {
         if (this.turning !== d.turn) return;
+        const held = performance.now() - d.lastT > HOLD_MS;
         const flick = d.turn.dir > 0 ? -d.vx : d.vx;
-        const commit = d.turn.p > DRAG_COMMIT || flick > FLICK_PX_PER_MS;
-        if (e.type === "pointercancel" && d.turn.p < 0.5) this.animateTo(0, TURN_MS);
-        else this.animateTo(commit ? 1 : 0, TURN_MS);
+        const decision = e.type === "pointercancel" && d.turn.p < 0.5 ? "spring" : releaseDecision({ p: d.turn.p, flick, held });
+        d.turn.p = settleProgress(d.turn.p, { spread: this.spread, dir: d.turn.dir });
+        this.animateTo(decision === "commit" ? 1 : 0, TURN_MS);
         return;
       }
       if (e.type === "pointercancel") return;
       const moved = Math.hypot(e.clientX - d.x0, e.clientY - d.y0);
+      if (this.turnMode === "fast" && moved > 12) {
+        const dx = e.clientX - d.x0;
+        if (Math.abs(dx) < 8) return;
+        const dir = dx < 0 ? 1 : -1;
+        const held = performance.now() - d.lastT > HOLD_MS;
+        const flick = dir > 0 ? -d.vx : d.vx;
+        const travel = this.geo?.pageW || 1;
+        const p = Math.min(1, Math.abs(dx) / travel);
+        if (releaseDecision({ p, flick, held }) === "commit") this.turn(dir);
+        return;
+      }
       if (moved > 12 || performance.now() - d.t0 > 600) return;
       const rect = el.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;

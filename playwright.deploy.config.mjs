@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const live = "https://bigdaddy109.github.io/library-read/";
+const live = process.env.DEPLOY_URL || "https://bigdaddy109.github.io/library-read/";
 
 export default defineConfig({
   testDir: "./e2e",

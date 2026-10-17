@@ -8,8 +8,12 @@ import {
   curlPose,
   curlRadius,
   fxFromProgress,
+  leafAnchor,
   lastStart,
+  normalizePrefs,
   pageGeometry,
+  releaseDecision,
+  settleProgress,
   stepDrag,
   turnTarget,
 } from "../docs/reader.js?v=1";
@@ -213,6 +217,73 @@ describe("page curl", () => {
     for (const body of bodies) {
       for (const token of banned) assert.equal(body.includes(token), false, token);
     }
+  });
+});
+
+describe("page-turn feel", () => {
+  const pageW = 600;
+  const pageH = 800;
+
+  it("keeps a drag paused until release, then commits, flicks, or springs", () => {
+    assert.equal(releaseDecision({ p: 0.1, flick: 0, held: true }), "spring");
+    assert.equal(releaseDecision({ p: 0.1, flick: 0.5, held: true }), "spring");
+    assert.equal(releaseDecision({ p: 0.1, flick: 0.5, held: false }), "commit");
+    assert.equal(releaseDecision({ p: 0.4, flick: 0, held: true }), "commit");
+    assert.equal(releaseDecision({ p: 0.28, flick: 0, held: false }), "spring");
+    assert.equal(releaseDecision({ p: 0.29, flick: 0, held: false }), "commit");
+  });
+
+  it("a short pull is enough; the finger does not cross the whole page", () => {
+    const sample = stepDrag(
+      { pageW: 374, pageH: 700, dir: 1, x0: 374, y0: 400, leafLeft: 0, grabX: 374 },
+      { clientX: 374 - 110, clientY: 400 }
+    );
+    assert.ok(sample.p > 0.28 && sample.p < 0.5, `p ${sample.p}`);
+    assert.equal(releaseDecision({ p: sample.p, flick: 0, held: true }), "commit");
+  });
+
+  it("a phone turn still ends at the spine", () => {
+    assert.equal(leafAnchor(false, pageW), 0);
+    assert.equal(pageGeometry(390, 844).spread, false);
+    assert.equal(fxFromProgress(0, 1, pageW), pageW);
+    assert.equal(fxFromProgress(1, 1, pageW), 0);
+    assert.equal(settleProgress(0.4, { spread: false, dir: 1 }), 0.4);
+  });
+
+  it("a desktop spread hinges on the gutter and can cross onto the facing page", () => {
+    assert.equal(pageGeometry(1200, 700).spread, true);
+    assert.equal(leafAnchor(true, pageW), pageW);
+    assert.equal(fxFromProgress(0, 1, pageW, true), pageW);
+    assert.equal(fxFromProgress(0.5, 1, pageW, true), 0);
+    assert.equal(fxFromProgress(1, 1, pageW, true), -pageW);
+    assert.equal(settleProgress(0.4, { spread: true, dir: 1 }), 0.2);
+    const held = stepDrag(
+      { pageW, pageH, dir: 1, x0: pageW + pageW * 0.9, y0: 400, leafLeft: pageW, grabX: pageW * 0.9, spread: true },
+      { clientX: pageW + pageW * 0.55, clientY: 430 }
+    );
+    assert.equal(held.edgeGrab, true);
+    assert.ok(held.fx > 0 && held.p > 0.28 && held.p < 0.6, `fx ${held.fx} p ${held.p}`);
+    const pose = curlPose({ pageW, pageH, fx: held.fx, bendY: held.bendY });
+    assert.ok(Math.abs(pose.corner.x - held.fx) < 1.5);
+    const crossed = stepDrag(
+      { pageW, pageH, dir: 1, x0: pageW + pageW * 0.9, y0: 400, leafLeft: pageW, grabX: pageW * 0.9, spread: true },
+      { clientX: pageW - 80, clientY: 400 }
+    );
+    assert.ok(crossed.fx < 0, `fx ${crossed.fx}`);
+    assert.ok(crossed.p > 1);
+    const over = curlPose({ pageW, pageH, fx: crossed.fx, bendY: 0 });
+    assert.ok(over.corner.x < 0);
+    assert.match(over.flap.transform, /rotateY\(-/);
+    assert.equal(over.flap.opacity, "1");
+    const settled = settleProgress(crossed.p, { spread: true, dir: 1 });
+    assert.ok(Math.abs(fxFromProgress(settled, 1, pageW, true) - crossed.fx) < 1.5);
+  });
+
+  it("快速換頁 is remembered only when chosen; curl stays the default", () => {
+    assert.deepEqual(normalizePrefs(null), { font: 1, turn: "curl" });
+    assert.deepEqual(normalizePrefs({ font: 2 }), { font: 2, turn: "curl" });
+    assert.deepEqual(normalizePrefs({ font: 2, turn: "fast" }), { font: 2, turn: "fast" });
+    assert.equal(normalizePrefs({ turn: "slide" }).turn, "curl");
   });
 });
 

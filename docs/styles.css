@@ -686,6 +686,17 @@ h1 {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.reader-top .turn-toggle {
+  flex-shrink: 0;
+  padding: 0.35rem 0.45rem;
+  white-space: nowrap;
+}
+
+.reader-top .turn-toggle[aria-pressed="true"] {
+  background: rgba(90, 58, 30, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(90, 58, 30, 0.4);
+}
+
 .reader-stage {
   position: relative;
   flex: 1;
@@ -821,6 +832,10 @@ h1 {
   animation: page-in 260ms ease-out;
 }
 
+.reader-book.is-fast-turn .page-viewport {
+  animation: page-fast 160ms ease-out;
+}
+
 .reader-book.is-edge .page-viewport {
   animation: page-edge 280ms ease-out;
 }
@@ -828,6 +843,15 @@ h1 {
 @keyframes page-in {
   from {
     opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes page-fast {
+  from {
+    opacity: 0.15;
   }
   to {
     opacity: 1;
