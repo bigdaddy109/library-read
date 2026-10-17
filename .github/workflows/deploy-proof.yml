@@ -1,0 +1,82 @@
+name: deploy-proof
+
+# After GitHub Pages finishes deploying main, prove the live site is up and
+# shipping the shell version in this repo. workflow_dispatch runs the same
+# check on a branch before merge (set expected_cache to a wrong
+# library-read-shell-vN to prove the job fails).
+on:
+  workflow_run:
+    workflows: [pages-build-deployment]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      expected_cache:
+        description: "預期的 sw.js 快取名稱。留空則用 docs/sw.js。填錯可證明檢查會失敗。"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  post-deploy:
+    name: post-deploy check
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEPLOY_URL: https://bigdaddy109.github.io/library-read/
+      EXPECTED_CACHE: ${{ github.event.inputs.expected_cache }}
+      GH_TOKEN: ${{ github.token }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Curl the live site and match the shell version
+        run: bash scripts/deploy-check.sh
+
+      - name: Comment the result
+        if: always()
+        run: bash scripts/deploy-comment.sh
+
+  smoke:
+    name: production smoke
+    needs: post-deploy
+    if: needs.post-deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Smoke test against the live site
+        run: npx playwright test -c playwright.deploy.config.mjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-smoke-screenshots
+          path: |
+            deploy-smoke-screenshots/
+            test-results/
+          retention-days: 14
+          if-no-files-found: warn
