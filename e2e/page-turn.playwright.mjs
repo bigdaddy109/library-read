@@ -15,6 +15,75 @@ function saveShot(src, name) {
   }
 }
 
+/** Step the curl by hand so a jumped WebKit clock cannot finish the turn before the screenshot. */
+async function manualFrames(page) {
+  await page.evaluate(() => {
+    const real = window.requestAnimationFrame.bind(window);
+    const queue = [];
+    window.__rafReal = real;
+    window.requestAnimationFrame = (fn) => {
+      queue.push(fn);
+      return queue.length;
+    };
+    window.__rafQueue = queue;
+    window.__sawTurning = false;
+    const book = document.getElementById("reader-book");
+    new MutationObserver(() => {
+      if (book.classList.contains("is-turning")) window.__sawTurning = true;
+    }).observe(book, { attributes: true, attributeFilter: ["class"] });
+  });
+}
+
+async function stepFrames(page, count) {
+  await page.evaluate((count) => {
+    let now = window.__t0 || performance.now();
+    for (let i = 0; i < count; i += 1) {
+      const batch = window.__rafQueue.splice(0, window.__rafQueue.length);
+      now += 16;
+      for (const fn of batch) fn(now);
+    }
+    window.__t0 = now;
+  }, count);
+}
+
+async function releaseFrames(page) {
+  await page.evaluate(() => {
+    const queue = window.__rafQueue.splice(0, window.__rafQueue.length);
+    window.requestAnimationFrame = window.__rafReal;
+    let now = performance.now();
+    const run = () => {
+      const fn = queue.shift();
+      if (!fn) return;
+      now += 16;
+      fn(now);
+      if (queue.length) window.requestAnimationFrame(run);
+    };
+    if (queue.length) window.requestAnimationFrame(run);
+  });
+}
+
+async function dispatchPointers(page, events) {
+  await page.locator("#reader-book").evaluate((el, events) => {
+    for (const ev of events) {
+      el.dispatchEvent(
+        new PointerEvent(ev.type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: "touch",
+          isPrimary: true,
+          clientX: ev.x,
+          clientY: ev.y,
+          button: 0,
+          buttons: ev.type === "pointerup" ? 0 : 1,
+        })
+      );
+    }
+    window.__t0 = performance.now();
+  }, events);
+}
+
 async function sendPointers(page, events) {
   await page.locator("#reader-book").evaluate((el, events) => {
     for (const ev of events) {
@@ -121,17 +190,24 @@ test("a fast flick finishes without crossing the page", async ({ page }, testInf
   const start = await readerState(page);
   const g = await grab(page);
   const x1 = g.x0 - 36;
-  await sendPointers(page, [
+  await manualFrames(page);
+  await dispatchPointers(page, [
     { type: "pointerdown", x: g.x0, y: g.y },
     { type: "pointermove", x: g.x0 - 14, y: g.y },
     { type: "pointermove", x: x1, y: g.y },
     { type: "pointerup", x: x1, y: g.y },
   ]);
-  await expect.poll(async () => (await metrics(page)).turning).toBe(true);
+  await stepFrames(page, 14);
+  const mid = await metrics(page);
+  expect(mid.turning).toBe(true);
+  expect(mid.curl).toBe(true);
+  expect(mid.page).toBe(start.page);
+  expect(await page.evaluate(() => window.__sawTurning)).toBe(true);
   if (testInfo.project.name === "webkit-iphone-390") {
     await page.screenshot({ path: testInfo.outputPath("flick.png") });
     saveShot(testInfo.outputPath("flick.png"), "webkit-iphone-390-flick.png");
   }
+  await releaseFrames(page);
   await expect.poll(async () => (await readerState(page)).turning).toBe(false);
   const after = await readerState(page);
   expect(after.page + after.spine * 1000).toBeGreaterThan(start.page + start.spine * 1000);
@@ -161,16 +237,21 @@ test("a tap plays the full turn", async ({ page }, testInfo) => {
   const box = await page.locator("#reader-book").boundingBox();
   const x = box.x + box.width * 0.82;
   const y = box.y + box.height * 0.5;
-  await sendPointers(page, [
+  await manualFrames(page);
+  await dispatchPointers(page, [
     { type: "pointerdown", x, y },
     { type: "pointerup", x, y },
   ]);
-  await expect.poll(async () => (await metrics(page)).turning).toBe(true);
-  expect((await metrics(page)).curl).toBe(true);
+  await stepFrames(page, 14);
+  const mid = await metrics(page);
+  expect(mid.turning).toBe(true);
+  expect(mid.curl).toBe(true);
+  expect(await page.evaluate(() => window.__sawTurning)).toBe(true);
   if (testInfo.project.name === "webkit-iphone-390") {
     await page.screenshot({ path: testInfo.outputPath("tap.png") });
     saveShot(testInfo.outputPath("tap.png"), "webkit-iphone-390-tap.png");
   }
+  await releaseFrames(page);
   await expect.poll(async () => (await readerState(page)).turning).toBe(false);
   const after = await readerState(page);
   expect(after.page + after.spine * 1000).toBeGreaterThan(start.page + start.spine * 1000);
