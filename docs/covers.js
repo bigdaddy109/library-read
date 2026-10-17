@@ -1,6 +1,6 @@
 /** Original SVG/CSS covers and spine metrics. No external images. */
 
-import { hashString, seriesIdForBook, seriesMeta } from "./catalog.js?v=7";
+import { hashString, seriesIdForBook, seriesMeta } from "./catalog.js?v=8";
 
 export function escapeXml(value) {
   return String(value ?? "")

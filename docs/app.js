@@ -8,7 +8,7 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=7";
+} from "./library.js?v=8";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -32,15 +32,15 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=7";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=7";
+} from "./drive.js?v=8";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=8";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=7";
+} from "./link.js?v=8";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
@@ -51,8 +51,8 @@ import {
   saveOffset,
   textChapters,
   textIndexForAudio,
-} from "./listen.js?v=7";
-import { Reader } from "./reader.js?v=7";
+} from "./listen.js?v=8";
+import { Reader } from "./reader.js?v=8";
 import {
   closeBook,
   findShelfBook,
@@ -60,8 +60,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=7";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=7";
+} from "./shelf.js?v=8";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=8";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -106,7 +106,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=7" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=8" },
   demo: true,
 };
 
@@ -474,8 +474,16 @@ function firstTextSpine(epub) {
   return titled ? titled.index : 0;
 }
 
+function syncTurnButton() {
+  const btn = $("reader-turn");
+  if (!btn) return;
+  const fast = reader.turnMode === "fast";
+  btn.setAttribute("aria-pressed", fast ? "true" : "false");
+}
+
 function showReaderScreen(book) {
   els.readerTitle.textContent = book.title;
+  syncTurnButton();
   els.reader.classList.remove("hidden");
   els.reader.hidden = false;
   document.documentElement.classList.add("reading");
@@ -876,6 +884,7 @@ const reader = new Reader(els.readerBook, {
     if (dir > 0) showToast("已經是最後一頁。");
   },
 });
+syncTurnButton();
 
 function handleLinkResult(result) {
   if (!result || result.status === "idle" || result.status === "opened") {
@@ -946,6 +955,11 @@ function bind() {
   $("reader-font").addEventListener("click", () => {
     const step = reader.cycleFont();
     showToast(`字級 ${step + 1}/4`, 1200);
+  });
+  $("reader-turn").addEventListener("click", () => {
+    const mode = reader.toggleFastTurn();
+    syncTurnButton();
+    showToast(mode === "fast" ? "已改為快速換頁" : "已改為捲頁", 1400);
   });
   for (const btn of document.querySelectorAll("[data-close]")) {
     btn.addEventListener("click", hideSheets);
