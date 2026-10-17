@@ -36,7 +36,6 @@ jobs:
     timeout-minutes: 15
     env:
       DEPLOY_URL: https://bigdaddy109.github.io/library-read/
-      DEPLOY_CHECK_OUT: ${{ runner.temp }}/deploy-proof
       EXPECTED_CACHE: ${{ github.event.inputs.expected_cache }}
       DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
     steps:
