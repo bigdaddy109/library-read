@@ -5,6 +5,9 @@ name: deploy-proof
 # check on a branch before merge (set expected_cache to a wrong
 # library-read-shell-vN to prove the job fails).
 on:
+  # pull_request is only so this pilot can run on the PR branch before the
+  # workflow file exists on main. The follow-up commit removes it.
+  pull_request:
   workflow_run:
     workflows: [pages-build-deployment]
     types: [completed]
@@ -26,6 +29,7 @@ jobs:
     name: post-deploy check
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
@@ -34,11 +38,11 @@ jobs:
       DEPLOY_URL: https://bigdaddy109.github.io/library-read/
       DEPLOY_CHECK_OUT: ${{ runner.temp }}/deploy-proof
       EXPECTED_CACHE: ${{ github.event.inputs.expected_cache }}
-      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
 
       - name: Curl the live site and match the shell version
         run: bash scripts/deploy-check.sh
@@ -56,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
