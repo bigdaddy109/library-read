@@ -7,6 +7,11 @@ OUT_DIR="${DEPLOY_CHECK_OUT:-${RUNNER_TEMP:-/tmp}/deploy-proof}"
 BODY_FILE="$OUT_DIR/comment.md"
 SHA="${DEPLOY_SHA:?DEPLOY_SHA is required}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
+export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+if [[ -z "$GH_TOKEN" ]]; then
+  echo "GH_TOKEN is not set" >&2
+  exit 1
+fi
 
 if [[ ! -s "$BODY_FILE" ]]; then
   echo "missing comment body at $BODY_FILE" >&2

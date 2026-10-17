@@ -18,6 +18,7 @@ jobs:
     env:
       DEPLOY_URL: https://bigdaddy109.github.io/library-read/
       EXPECTED_CACHE: library-read-shell-v999
+      GH_TOKEN: ${{ github.token }}
       DEPLOY_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
