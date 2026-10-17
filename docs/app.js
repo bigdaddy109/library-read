@@ -5,10 +5,32 @@ import {
   chapterProgress,
   resumeSeconds,
   saveProgress,
+  latestTextBook,
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=8";
+} from "./library.js?v=9";
+import {
+  listenHeardChapter,
+  listenHeardLabel,
+  listenOpenUrl,
+  loadRate,
+  loadThemeChoice,
+  nextRate,
+  nextSleepMinutes,
+  nextTheme,
+  progressLineText,
+  progressPercent,
+  rateLabel,
+  readListenRecord,
+  resolveTheme,
+  saveRate,
+  saveThemeChoice,
+  sleepButtonText,
+  sleepIsDue,
+  sleepToast,
+  themeChoiceLabel,
+} from "./comfort.js?v=9";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -32,15 +54,15 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=8";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=8";
+} from "./drive.js?v=9";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=9";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=8";
+} from "./link.js?v=9";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
@@ -51,8 +73,8 @@ import {
   saveOffset,
   textChapters,
   textIndexForAudio,
-} from "./listen.js?v=8";
-import { Reader } from "./reader.js?v=8";
+} from "./listen.js?v=9";
+import { Reader } from "./reader.js?v=9";
 import {
   closeBook,
   findShelfBook,
@@ -60,8 +82,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=8";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=8";
+} from "./shelf.js?v=9";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=9";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -106,7 +128,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=8" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=9" },
   demo: true,
 };
 
@@ -118,6 +140,9 @@ const session = {
   offset: 0,
   saveTimer: 0,
   lastAudioSave: 0,
+  playbackRate: 1,
+  sleepUntil: null,
+  sleepTick: 0,
 };
 
 let swReloading = false;
@@ -259,7 +284,7 @@ function startSignIn(after) {
     showToast(msg, 4200);
     return;
   }
-  const run = pending || signInWithGoogle({ prompt: "consent" });
+  const run = pending || signInWithGoogle();
   run
     .then(async (token) => {
       await publishDriveToken(token);
@@ -338,9 +363,22 @@ function runDriveLoad(opts) {
 /* ---------- open a book ---------- */
 
 function progressLine(book) {
-  const text = textProgress(book.id);
-  if (!text) return bookHasEbook(book) ? "尚未開始" : "這本書沒有電子書，只有音訊。";
-  return `讀到：${text.label || "閱讀中"}`;
+  return progressLineText(textProgress(book.id), bookHasEbook(book));
+}
+
+function coverProgress(book) {
+  const pct = progressPercent(textProgress(book.id));
+  return pct == null ? "" : `${pct}%`;
+}
+
+function listenHeardLine(book) {
+  let store = null;
+  try {
+    store = localStorage;
+  } catch {
+    return "";
+  }
+  return listenHeardLabel(listenHeardChapter(book, readListenRecord(book.id, store)));
 }
 
 /** Start a silent token fetch in this turn (the tap), before any await. Never a popup. */
@@ -493,6 +531,7 @@ function showReaderScreen(book) {
 function closeReader() {
   persistText();
   persistAudio();
+  clearSleepTimer();
   stopAudio();
   reader.close();
   session.book = null;
@@ -584,12 +623,86 @@ function loadTrack(index, { play = false, start = null } = {}) {
   } else if (start != null) {
     audio.currentTime = start;
   }
+  applyPlaybackRate();
   if (play) {
     const p = audio.play();
     if (p?.catch) p.catch(() => updatePlayButton());
   }
   updateTrackChrome();
   updateMediaSession();
+}
+
+function prefsStore() {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function applyPlaybackRate() {
+  const audio = els.audio;
+  if (audio) {
+    audio.preservesPitch = true;
+    audio.webkitPreservesPitch = true;
+    if (audio.playbackRate !== session.playbackRate) audio.playbackRate = session.playbackRate;
+  }
+  const btn = $("listen-rate");
+  if (!btn) return;
+  const label = rateLabel(session.playbackRate);
+  btn.textContent = label;
+  btn.setAttribute("aria-label", `播放速度 ${label}`);
+}
+
+function cycleRate() {
+  session.playbackRate = nextRate(session.playbackRate);
+  saveRate(session.playbackRate, prefsStore());
+  applyPlaybackRate();
+}
+
+function clearSleepTimer() {
+  session.sleepUntil = null;
+  if (session.sleepTick) {
+    clearInterval(session.sleepTick);
+    session.sleepTick = 0;
+  }
+  updateSleepButton();
+}
+
+function updateSleepButton() {
+  const btn = $("listen-sleep");
+  if (!btn) return;
+  const left = session.sleepUntil ? Math.max(0, session.sleepUntil - Date.now()) : 0;
+  const mins = left > 0 ? Math.ceil(left / 60000) : 0;
+  const label = sleepButtonText(mins);
+  btn.textContent = label;
+  btn.classList.toggle("is-on", mins > 0);
+  btn.setAttribute("aria-label", mins > 0 ? `睡眠計時，還剩 ${label}` : "睡眠計時關閉");
+}
+
+function cycleSleepTimer() {
+  const remaining = session.sleepUntil ? Math.ceil((session.sleepUntil - Date.now()) / 60000) : 0;
+  const next = nextSleepMinutes(remaining);
+  if (!next) {
+    clearSleepTimer();
+    showToast(sleepToast(0));
+    return;
+  }
+  session.sleepUntil = Date.now() + next * 60 * 1000;
+  if (session.sleepTick) clearInterval(session.sleepTick);
+  session.sleepTick = setInterval(() => {
+    if (!sleepIsDue(session.sleepUntil, Date.now())) {
+      updateSleepButton();
+      return;
+    }
+    clearSleepTimer();
+    els.audio.pause();
+    persistAudio();
+    showToast("睡眠計時到了，已暫停");
+    updatePlayButton();
+  }, 15000);
+  updateSleepButton();
+  showToast(sleepToast(next));
 }
 
 function stopAudio() {
@@ -787,6 +900,10 @@ function bindAudio() {
     loadTrack(session.trackIndex + 1, { play: !audio.paused, start: 0 });
     followAudio();
   });
+  $("listen-rate")?.addEventListener("click", cycleRate);
+  $("listen-sleep")?.addEventListener("click", cycleSleepTimer);
+  session.playbackRate = loadRate(prefsStore());
+  applyPlaybackRate();
   $("listen-tracks").addEventListener("click", () => {
     renderTracks();
     openSheet("tracks-sheet");
@@ -936,6 +1053,13 @@ function bind() {
       });
   });
   els.reload.addEventListener("click", () => runDriveLoad());
+  for (const btn of document.querySelectorAll("[data-theme-toggle]")) {
+    btn.addEventListener("click", () => {
+      const next = nextTheme(loadThemeChoice(prefsStore()));
+      saveThemeChoice(next, prefsStore());
+      applyTheme(next);
+    });
+  }
   els.signout.addEventListener("click", async () => {
     await signOutGoogle();
     await publishDriveToken("");
@@ -991,12 +1115,41 @@ function bind() {
   });
 }
 
+function prefersDark() {
+  return matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function applyTheme(choice = loadThemeChoice(prefsStore())) {
+  const resolved = resolveTheme(choice, prefersDark());
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.dataset.themeChoice = choice;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", resolved === "sepia" ? "#2a241c" : resolved === "dark" ? "#1a1814" : "#f3eee4");
+  const label = themeChoiceLabel(choice);
+  for (const btn of document.querySelectorAll("[data-theme-toggle]")) {
+    btn.textContent = label;
+    btn.setAttribute("aria-label", `夜間閱讀：${label}`);
+  }
+}
+
 function boot() {
   const versionEl = $("app-version");
   if (versionEl && APP_VERSION) versionEl.textContent = `v${APP_VERSION}`;
+  applyTheme();
+  try {
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (loadThemeChoice(prefsStore()) === "system") applyTheme("system");
+    });
+  } catch {
+    /* older WebKit */
+  }
   initShelf({
     onRead: (book, opts) => openReader(book, opts),
     progressLine,
+    continueBook: (books) => latestTextBook(books),
+    coverProgress,
+    listenHref: (book) => listenOpenUrl(book.id),
+    listenHeard: listenHeardLine,
   });
   const snapshot = loadLibrarySnapshot();
   if (snapshot.length) {

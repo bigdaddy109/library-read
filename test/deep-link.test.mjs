@@ -3,7 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { parseEpub } from "../docs/epub.js?v=1";
 import { textChapters } from "../docs/listen.js?v=1";
 import { buildLibrary } from "../docs/library.js?v=1";
-import { beginInteractiveSignIn, clearAccessToken, freshAccessToken } from "../docs/drive.js?v=1";
+import { DRIVE_SEEN_KEY, DRIVE_SESSION_KEY, beginInteractiveSignIn, clearAccessToken, freshAccessToken } from "../docs/drive.js?v=1";
 import {
   LINK_MISSING_MESSAGE,
   LINK_OPEN_LABEL,
@@ -75,7 +75,15 @@ describe("deep link chapter", () => {
 });
 
 describe("deep link sign-in", { concurrency: false }, () => {
-  afterEach(() => clearAccessToken());
+  afterEach(() => {
+    clearAccessToken();
+    try {
+      localStorage.removeItem(DRIVE_SEEN_KEY);
+      localStorage.removeItem(DRIVE_SESSION_KEY);
+    } catch {
+      /* no localStorage */
+    }
+  });
 
   it("does not call requestAccessToken until the button tap, then opens after sign-in", async () => {
     const prompts = [];
@@ -98,6 +106,30 @@ describe("deep link sign-in", { concurrency: false }, () => {
     assert.equal(result.chapter, 2);
     assert.deepEqual(opened, [{ chapter: 2 }]);
     assert.deepEqual(prompts, ["consent"]);
+  });
+
+  it("a return visit from Library Listen tries a silent prompt before consent", async () => {
+    const data = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (data.has(k) ? data.get(k) : null),
+      setItem: (k, v) => data.set(k, String(v)),
+      removeItem: (k) => data.delete(k),
+    };
+    localStorage.setItem(DRIVE_SEEN_KEY, "1");
+    const prompts = [];
+    installGis(prompts);
+    clearAccessToken();
+    const session = createDeepLinkSession({
+      isSignedIn: () => !!freshAccessToken(),
+      beginInteractiveSignIn,
+      ensureLibrary: async () => {},
+      findBook: () => ({ id: "immune/immune" }),
+      openBook: async () => {},
+    });
+    session.load(parseDeepLink("?series=Immune&book=Immune&ch=2"));
+    const result = await session.activate();
+    assert.equal(result.status, "opened");
+    assert.deepEqual(prompts, [""]);
   });
 
   it("when already signed in, the tap opens the book and does not request a token", async () => {
