@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
+  DRIVE_SEEN_KEY,
+  DRIVE_SESSION_KEY,
   REAUTH_LABEL,
   beginInteractiveSignIn,
   clearAccessToken,
+  clearDriveSession,
   freshAccessToken,
+  saveDriveSession,
   tokenForChapterFetch,
   tokenForRead,
 } from "../docs/drive.js?v=1";
@@ -50,6 +54,13 @@ describe("Drive token during reading", { concurrency: false }, () => {
   beforeEach(() => {
     prompts = [];
     clearAccessToken();
+    try {
+      localStorage.removeItem(DRIVE_SEEN_KEY);
+      localStorage.removeItem(DRIVE_SESSION_KEY);
+    } catch {
+      /* no localStorage */
+    }
+    clearDriveSession();
     installGis(prompts);
   });
 
@@ -89,5 +100,29 @@ describe("Drive token during reading", { concurrency: false }, () => {
     assert.deepEqual(prompts, [""]);
     await assert.rejects(tokenForRead(), (err) => err.reauth === true);
     assert.deepEqual(prompts, ["", ""]);
+  });
+
+  it("a device that has signed in before tries prompt '' and falls back to consent", async () => {
+    const data = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (data.has(k) ? data.get(k) : null),
+      setItem: (k, v) => data.set(k, String(v)),
+      removeItem: (k) => data.delete(k),
+    };
+    localStorage.setItem(DRIVE_SEEN_KEY, "1");
+    await beginInteractiveSignIn();
+    assert.deepEqual(prompts, [""]);
+    prompts.length = 0;
+    clearAccessToken();
+    installGis(prompts, { failSilent: true });
+    await beginInteractiveSignIn();
+    assert.deepEqual(prompts, ["", "consent"]);
+    clearAccessToken();
+    prompts.length = 0;
+    localStorage.removeItem(DRIVE_SEEN_KEY);
+    saveDriveSession({ folderId: "folder-1", folderName: "Library" });
+    installGis(prompts);
+    await beginInteractiveSignIn();
+    assert.deepEqual(prompts, [""]);
   });
 });

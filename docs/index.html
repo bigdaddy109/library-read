@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f3eee4" />
+    <script>
+      try {
+        var choice = localStorage.getItem("libraryread.theme.v1") || "system";
+        var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+        var resolved = choice === "dark" ? "dark" : choice === "sepia" ? "sepia" : dark ? "dark" : "light";
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.dataset.themeChoice = choice === "dark" || choice === "sepia" || choice === "system" ? choice : "system";
+      } catch (e) {}
+    </script>
     <meta
       name="description"
       content="Library Read — 翻頁讀電子書，有音檔的書可以邊聽邊讀。用 Google 登入讀共享的 Library 資料夾。"
@@ -28,9 +37,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="讀書" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=8" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=8" />
-    <link rel="stylesheet" href="./styles.css?v=8" />
+    <link rel="icon" href="./icon.svg?v=9" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=9" />
+    <link rel="stylesheet" href="./styles.css?v=9" />
     <title>書架 · Library Read</title>
   </head>
   <body class="shell-shelf">
@@ -40,6 +49,7 @@
         <div class="mast-row">
           <h1>書架</h1>
           <div class="mast-links">
+            <button type="button" id="btn-theme" class="ghost theme-toggle" data-theme-toggle>跟隨系統</button>
             <a class="player-link" href="https://bigdaddy109.github.io/library-listen/">Library Listen</a>
           </div>
         </div>
@@ -90,6 +100,7 @@
         <button type="button" id="reader-reauth" class="ghost hidden" hidden>重新授權</button>
         <button type="button" id="reader-toc" class="ghost">目錄</button>
         <button type="button" id="reader-font" class="ghost" aria-label="字級">Aa</button>
+        <button type="button" id="reader-theme" class="ghost theme-toggle" data-theme-toggle>跟隨系統</button>
         <button type="button" id="reader-turn" class="ghost turn-toggle" aria-pressed="false">快速換頁</button>
       </header>
       <div id="reader-book" class="reader-stage"></div>
@@ -112,6 +123,10 @@
           <button type="button" id="listen-next" class="icon" aria-label="下一段音訊">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z" /></svg>
           </button>
+        </div>
+        <div class="listen-row listen-tools">
+          <button type="button" id="listen-rate" class="skip" aria-label="播放速度 1.0×">1.0×</button>
+          <button type="button" id="listen-sleep" class="skip" aria-label="睡眠計時關閉">睡眠</button>
         </div>
         <div class="listen-row listen-meta">
           <button type="button" id="listen-tracks" class="track-button">
@@ -151,6 +166,6 @@
     </div>
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=8"></script>
+    <script type="module" src="./app.js?v=9"></script>
   </body>
 </html>

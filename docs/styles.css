@@ -163,8 +163,10 @@ h1 {
   padding: 0.55rem 1.15rem;
 }
 
-.primary.large {
+.primary.large,
+#btn-google {
   font-weight: 700;
+  min-height: 44px;
 }
 
 .primary:disabled,
@@ -247,6 +249,11 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-height: 44px;
+}
+
+.theme-toggle {
+  min-height: 44px;
 }
 
 .chip-dot {
@@ -323,6 +330,32 @@ h1 {
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.cover-progress {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.continue-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.9rem;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 /* ---------- cover → book (openCoverBook) ---------- */
@@ -598,6 +631,24 @@ h1 {
   font-size: 0.86rem;
 }
 
+.listen-jump {
+  flex: 1 1 100%;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.listen-heard {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -682,6 +733,7 @@ h1 {
 }
 
 .reader-top .ghost {
+  min-height: 44px;
   padding: 0.35rem 0.7rem;
   background: rgba(255, 255, 255, 0.35);
 }
@@ -1091,8 +1143,8 @@ h1 {
 }
 
 .listen-bar .icon {
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -1129,10 +1181,22 @@ h1 {
   border-radius: 999px;
   background: transparent;
   color: inherit;
-  padding: 0.3rem 0.6rem;
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
   font-size: 0.8rem;
   cursor: pointer;
   touch-action: manipulation;
+}
+
+.listen-tools {
+  justify-content: flex-start;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.listen-bar .skip.is-on {
+  background: rgba(240, 195, 106, 0.2);
+  border-color: #f0c36a;
 }
 
 .track-button {
@@ -1329,6 +1393,50 @@ h1 {
   .chip {
     font-size: 0.78rem;
   }
+}
+
+html[data-theme="dark"],
+html[data-theme="sepia"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] {
+  --paper: #1a1814;
+  --paper-deep: #12110e;
+  --page: #24211c;
+  --ink: #f3eee4;
+  --muted: #b7ad9e;
+  --line: #3a342c;
+}
+
+html[data-theme="sepia"] {
+  --paper: #2a241c;
+  --paper-deep: #211c16;
+  --page: #3a3126;
+  --ink: #f3e6d0;
+  --muted: #cbbba2;
+  --line: #4d4032;
+}
+
+html[data-theme="dark"] .paper,
+html[data-theme="sepia"] .paper,
+html[data-theme="dark"].book-open .paper,
+html[data-theme="sepia"].book-open .paper,
+html[data-theme="dark"].reading .paper,
+html[data-theme="sepia"].reading .paper,
+html[data-theme="dark"] .reader,
+html[data-theme="sepia"] .reader {
+  background: var(--paper);
+}
+
+html[data-theme="dark"] .cover-card,
+html[data-theme="sepia"] .cover-card,
+html[data-theme="dark"] .search input,
+html[data-theme="sepia"] .search input,
+html[data-theme="dark"] .reader-top .ghost,
+html[data-theme="sepia"] .reader-top .ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

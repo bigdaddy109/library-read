@@ -1,5 +1,5 @@
 /* Shell-only cache. Audio is never cached; EPUB bytes live in IndexedDB, not here. */
-const CACHE = "library-read-shell-v8";
+const CACHE = "library-read-shell-v9";
 const DRIVE_MEDIA_PREFIX = "/drive-media/";
 const DRIVE_TOKEN_MESSAGE = "libraryread.drive-token";
 const DRIVE_UNAUTHORIZED_MESSAGE = "libraryread.drive-unauthorized";
@@ -13,24 +13,25 @@ self.addEventListener("message", (event) => {
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=8",
-  "./app.js?v=8",
-  "./library.js?v=8",
-  "./link.js?v=8",
-  "./drive.js?v=8",
-  "./search.js?v=8",
-  "./epub.js?v=8",
-  "./catalog.js?v=8",
-  "./covers.js?v=8",
-  "./shelf.js?v=8",
-  "./content.js?v=8",
-  "./reader.js?v=8",
-  "./listen.js?v=8",
-  "./store.js?v=8",
+  "./styles.css?v=9",
+  "./app.js?v=9",
+  "./library.js?v=9",
+  "./link.js?v=9",
+  "./drive.js?v=9",
+  "./search.js?v=9",
+  "./epub.js?v=9",
+  "./catalog.js?v=9",
+  "./comfort.js?v=9",
+  "./covers.js?v=9",
+  "./shelf.js?v=9",
+  "./content.js?v=9",
+  "./reader.js?v=9",
+  "./listen.js?v=9",
+  "./store.js?v=9",
   "./manifest.webmanifest",
-  "./icon.svg?v=8",
-  "./apple-touch-icon.png?v=8",
-  "./sample/demo.epub?v=8",
+  "./icon.svg?v=9",
+  "./apple-touch-icon.png?v=9",
+  "./sample/demo.epub?v=9",
 ];
 
 self.addEventListener("install", (event) => {
