@@ -14,9 +14,9 @@ function saveShot(src, name) {
   }
 }
 
-async function keepShot(page, testInfo, name) {
+async function keepShot(page, testInfo, name, opts = {}) {
   const path = testInfo.outputPath(`${name}.png`);
-  await page.screenshot({ path });
+  await page.screenshot({ path, ...opts });
   if (testInfo.project.name === "webkit-iphone-390") saveShot(path, `${name}.png`);
 }
 
@@ -100,7 +100,8 @@ test("the shelf shows 繼續閱讀 and a cover percentage", async ({ page }, tes
   await expect(row).toContainText("繼續閱讀");
   await expect(row).toContainText("42%");
   await expect(page.locator(".cover-card[data-id='munroe/what-if-1'] .cover-progress")).toHaveText("42%");
-  await keepShot(page, testInfo, "continue-percent");
+  await page.locator(".cover-card[data-id='munroe/what-if-1']").scrollIntoViewIfNeeded();
+  await keepShot(page, testInfo, "continue-percent", { fullPage: true });
   await row.click();
   await expect(page.locator("#reader:not([hidden])")).toBeVisible();
   await expect(page.locator("#reader-title")).toHaveText("What If?");
@@ -146,6 +147,11 @@ test("night mode follows the system, then dark and dim-sepia persist", async ({ 
   await expect(page.locator("#reader-theme")).toHaveText("暗褐");
   const pageColor = await page.locator("#reader-book .page-paper").evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(pageColor).not.toBe("rgb(251, 246, 236)");
+  await page.waitForFunction(() => {
+    const el = document.getElementById("reader");
+    if (!el || el.hidden) return false;
+    return getComputedStyle(el).opacity === "1" && el.getAnimations().every((a) => a.playState === "finished");
+  });
   await keepShot(page, testInfo, "night-mode");
 });
 
