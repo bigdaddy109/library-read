@@ -4,7 +4,7 @@
  * are public browser config (not secrets).
  */
 
-import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js?v=8";
+import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js?v=9";
 
 /** Public Web application OAuth Client ID. Not a secret. */
 export const GOOGLE_OAUTH_CLIENT_ID =
@@ -28,6 +28,8 @@ export const DRIVE_MEDIA_PREFIX = "/drive-media/";
 export const DRIVE_TOKEN_MESSAGE = "libraryread.drive-token";
 export const DRIVE_UNAUTHORIZED_MESSAGE = "libraryread.drive-unauthorized";
 export const DRIVE_SESSION_KEY = "libraryread.drive.v1";
+/** This device has completed sign-in before. Survives 登出. */
+export const DRIVE_SEEN_KEY = "libraryread.drive.seen";
 /** Drive files.list default. Tests pass a smaller pageSize to force nextPageToken. */
 export const DRIVE_LIST_PAGE_SIZE = 1000;
 export const DRIVE_MEDIA_PASSTHROUGH_HEADERS = [
@@ -127,6 +129,7 @@ function applyGisToken(resp) {
   const ttl = Number.isFinite(seconds) && seconds > 0 ? seconds : 3600;
   accessToken = resp.access_token;
   tokenExpiresAt = Date.now() + ttl * 1000;
+  rememberSignedIn();
   return accessToken;
 }
 
@@ -665,6 +668,24 @@ function defaultStore() {
   return null;
 }
 
+/** True when this browser has signed in before, even after 登出. */
+export function hasSignedInBefore(store = defaultStore()) {
+  try {
+    if (store?.getItem?.(DRIVE_SEEN_KEY) === "1") return true;
+  } catch {
+    /* private mode */
+  }
+  return !!loadDriveSession(store);
+}
+
+export function rememberSignedIn(store = defaultStore()) {
+  try {
+    store?.setItem?.(DRIVE_SEEN_KEY, "1");
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 function driveListUrl({ q, pageToken, fields, pageSize = DRIVE_LIST_PAGE_SIZE, corpora = "user" } = {}) {
   const url = new URL(`${DRIVE_API}/files`);
   const size = Math.min(1000, Math.max(1, Number(pageSize) || DRIVE_LIST_PAGE_SIZE));
@@ -1005,15 +1026,19 @@ function requestGisToken(prompt) {
 /**
  * Explicit button only (用 Google 登入 / 重新授權 / 打開連結).
  * Must run inside the click, before any await, so Safari still has the gesture.
+ * A device that has signed in before tries prompt "" first (no consent screen)
+ * and falls back to "consent" only when that fails. A first visit still uses consent.
  */
 export function beginInteractiveSignIn() {
-  return requestGisToken("consent");
+  if (!hasSignedInBefore()) return requestGisToken("consent");
+  return requestGisToken("").catch(() => requestGisToken("consent"));
 }
 
-export async function signInWithGoogle({ prompt = "consent" } = {}) {
+export async function signInWithGoogle({ prompt } = {}) {
   requireClientId();
   if (!gisOauth()?.initTokenClient) await preloadGoogleIdentity();
-  return requestGisToken(prompt);
+  if (prompt != null) return requestGisToken(prompt);
+  return beginInteractiveSignIn();
 }
 
 export async function refreshGoogleToken() {

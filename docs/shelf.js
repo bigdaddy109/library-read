@@ -15,9 +15,9 @@ import {
   seriesIdForBook,
   seriesMeta,
   shelfStatusLabel,
-} from "./catalog.js?v=8";
-import { coverSvg } from "./covers.js?v=8";
-import { trimQuery } from "./search.js?v=8";
+} from "./catalog.js?v=9";
+import { coverSvg } from "./covers.js?v=9";
+import { trimQuery } from "./search.js?v=9";
 
 const SERIES_KEY = "libraryread.shelfSeries";
 
@@ -87,6 +87,14 @@ function renderCovers(books) {
     card.querySelector(".cover-art").innerHTML = coverSvg(book);
     card.querySelector("h3").textContent = book.title;
     card.querySelector("p").textContent = `${book.author || ""} · ${flags.badge}`;
+    const pct = hooks.coverProgress?.(book) || "";
+    if (pct) {
+      const line = document.createElement("span");
+      line.className = "cover-progress";
+      line.textContent = pct;
+      card.appendChild(line);
+      card.setAttribute("aria-label", `${book.title} · ${flags.badge} · ${pct}`);
+    }
     card.addEventListener("click", () => openCoverBook(book));
     grid.appendChild(card);
   }
@@ -110,7 +118,21 @@ function render() {
     els.stage.appendChild(empty);
     return;
   }
+  renderContinue();
   renderCovers(books);
+}
+
+function renderContinue() {
+  const book = hooks.continueBook?.(state.books);
+  if (!book || !visibleBooks().some((item) => item.id === book.id)) return;
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "continue-row";
+  row.dataset.continue = book.id;
+  const pct = hooks.coverProgress?.(book) || "";
+  row.textContent = pct ? `繼續閱讀 · ${book.title} · ${pct}` : `繼續閱讀 · ${book.title}`;
+  row.addEventListener("click", () => hooks.onRead?.(book, { listen: false }));
+  els.stage.appendChild(row);
 }
 
 export function setShelfBooks(books, source = "library") {
@@ -314,6 +336,8 @@ function renderSpread(book, opened) {
           <div class="actions">
             <button type="button" class="primary" data-open="read">讀</button>
             <button type="button" class="primary" data-open="listen">邊聽邊讀</button>
+            <a class="listen-jump" rel="noopener"></a>
+            <p class="listen-heard"></p>
           </div>
         </section>
         <div class="cover-leaf" aria-hidden="true">
@@ -341,6 +365,19 @@ function renderSpread(book, opened) {
   listen.disabled = !(flags.read && flags.audio);
   read.addEventListener("click", () => hooks.onRead?.(book, { listen: false }));
   listen.addEventListener("click", () => hooks.onRead?.(book, { listen: true }));
+  const jump = els.bookStage.querySelector(".listen-jump");
+  const href = hooks.listenHref?.(book) || "";
+  if (href) {
+    jump.href = href;
+    jump.target = "_blank";
+    jump.textContent = "到 Library Listen 聽這本";
+  } else {
+    jump.remove();
+  }
+  const heard = els.bookStage.querySelector(".listen-heard");
+  const heardText = hooks.listenHeard?.(book) || "";
+  if (heardText) heard.textContent = heardText;
+  else heard.remove();
 }
 
 export function initShelf(options = {}) {

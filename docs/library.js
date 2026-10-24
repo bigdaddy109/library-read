@@ -533,6 +533,22 @@ export function saveTextProgress(bookId, text, store = defaultStore()) {
   return record;
 }
 
+/** The book whose text locator was saved most recently. */
+export function latestTextBook(books, store = defaultStore()) {
+  const all = loadProgress(store);
+  let best = null;
+  let bestAt = "";
+  for (const book of books || []) {
+    const text = all[book?.id]?.text;
+    if (!text?.locator || !text.updatedAt) continue;
+    if (text.updatedAt > bestAt) {
+      bestAt = text.updatedAt;
+      best = book;
+    }
+  }
+  return best;
+}
+
 /** Continue uses whichever of audio vs text was written last. */
 export function latestProgressKind(record) {
   if (!record) return null;
