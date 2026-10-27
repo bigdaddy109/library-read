@@ -15,9 +15,9 @@ import {
   seriesIdForBook,
   seriesMeta,
   shelfStatusLabel,
-} from "./catalog.js?v=12";
-import { coverSvg } from "./covers.js?v=12";
-import { trimQuery } from "./search.js?v=12";
+} from "./catalog.js?v=13";
+import { coverSvg } from "./covers.js?v=13";
+import { trimQuery } from "./search.js?v=13";
 
 const SERIES_KEY = "libraryread.shelfSeries";
 

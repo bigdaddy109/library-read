@@ -126,6 +126,8 @@ test("progress, 目錄, 字級 and the alignment sheet", async ({ page }, testIn
 
   const fontSize = () => page.locator("#reader-book .page-viewport .page-flow").evaluate((el) => getComputedStyle(el).fontSize);
   const before = await fontSize();
+  const more = page.locator("#reader-more");
+  if (await more.isVisible()) await more.click();
   await page.locator("#reader-font").click();
   await expect.poll(fontSize).not.toBe(before);
 
