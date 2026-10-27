@@ -8,8 +8,12 @@ import {
   formatTime,
   loadOffset,
   offsetToAlign,
+  createScrub,
+  mediaPositionState,
   pageIndexForFraction,
   saveOffset,
+  scrubFraction,
+  secondsForFraction,
   textChapterForSpine,
   textChapters,
   textIndexForAudio,
@@ -188,5 +192,41 @@ describe("proportional page follow", () => {
       spines,
     });
     assert.equal(next.page, 2);
+  });
+});
+
+describe("listen scrub", () => {
+  it("previews a drag and seeks only on release", () => {
+    const scrub = createScrub();
+    assert.deepEqual(scrub.down(0.1), { seek: false, fraction: 0.1 });
+    assert.equal(scrub.active, true);
+    assert.deepEqual(scrub.move(0.4), { seek: false, fraction: 0.4 });
+    assert.deepEqual(scrub.move(0.72), { seek: false, fraction: 0.72 });
+    assert.deepEqual(scrub.up(), { seek: true, fraction: 0.72 });
+    assert.equal(scrub.active, false);
+    assert.deepEqual(scrub.up(), { seek: false, fraction: null });
+    assert.equal(scrubFraction(30, 10, 100), 0.2);
+    assert.equal(secondsForFraction(0.25, 80), 20);
+  });
+
+  it("a cancelled drag does not seek", () => {
+    const scrub = createScrub();
+    scrub.down(0.2);
+    scrub.move(0.9);
+    assert.deepEqual(scrub.cancel(), { seek: false, fraction: null });
+  });
+
+  it("builds a lock-screen position clamped to the file", () => {
+    assert.equal(mediaPositionState({ duration: NaN, currentTime: 1 }), null);
+    assert.deepEqual(mediaPositionState({ duration: 20, currentTime: 48, playbackRate: 1.25 }), {
+      duration: 20,
+      position: 20,
+      playbackRate: 1.25,
+    });
+    assert.deepEqual(mediaPositionState({ duration: 20, currentTime: -4, playbackRate: 0 }), {
+      duration: 20,
+      position: 0,
+      playbackRate: 1,
+    });
   });
 });

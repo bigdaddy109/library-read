@@ -9,7 +9,7 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=11";
+} from "./library.js?v=12";
 import {
   listenHeardChapter,
   listenHeardLabel,
@@ -30,7 +30,7 @@ import {
   sleepIsDue,
   sleepToast,
   themeChoiceLabel,
-} from "./comfort.js?v=11";
+} from "./comfort.js?v=12";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -54,30 +54,34 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=11";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=11";
+} from "./drive.js?v=12";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=12";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=11";
+} from "./link.js?v=12";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
   audioIndexForText,
+  createScrub,
   followPageTarget,
   formatTime,
   loadOffset,
+  mediaPositionState,
   offsetToAlign,
   pageIndexForFraction,
   saveOffset,
+  scrubFraction,
+  secondsForFraction,
   textChapters,
   textIndexForAudio,
   trackChapterSpan,
-} from "./listen.js?v=11";
-import { Reader } from "./reader.js?v=11";
+} from "./listen.js?v=12";
+import { Reader } from "./reader.js?v=12";
 import {
   closeBook,
   findShelfBook,
@@ -85,8 +89,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=11";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=11";
+} from "./shelf.js?v=12";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=12";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -131,7 +135,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=11" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=12" },
   demo: true,
 };
 
@@ -148,6 +152,7 @@ const session = {
   sleepTick: 0,
   followHold: false,
   following: false,
+  scrub: createScrub(),
 };
 
 let swReloading = false;
@@ -861,6 +866,80 @@ function updateMediaSession() {
   } catch {
     /* MediaMetadata unsupported */
   }
+  syncPositionState();
+}
+
+function paintListenFraction(fraction) {
+  const shown = Math.min(1, Math.max(0, Number(fraction) || 0));
+  els.listenProgress.style.transform = `scaleX(${shown})`;
+  const scrubber = $("listen-scrub");
+  if (scrubber) scrubber.setAttribute("aria-valuenow", String(Math.round(shown * 1000)));
+}
+
+function syncPositionState() {
+  const ms = navigator.mediaSession;
+  if (!ms?.setPositionState) return;
+  const state = mediaPositionState({
+    duration: els.audio.duration,
+    currentTime: els.audio.currentTime,
+    playbackRate: els.audio.playbackRate || session.playbackRate,
+  });
+  if (!state) return;
+  try {
+    ms.setPositionState(state);
+  } catch {
+    /* Safari rejects a position that is still settling */
+  }
+}
+
+function commitListenSeek(fraction) {
+  const audio = els.audio;
+  const seconds = secondsForFraction(fraction, audio.duration);
+  if (!(Number.isFinite(audio.duration) && audio.duration > 0)) return;
+  audio.currentTime = seconds;
+  syncPositionState();
+}
+
+function bindScrub() {
+  const el = $("listen-scrub");
+  if (!el) return;
+  const fractionOf = (event) => {
+    const rect = el.getBoundingClientRect();
+    return scrubFraction(event.clientX, rect.left, rect.width);
+  };
+  el.addEventListener("pointerdown", (event) => {
+    if (event.button > 0) return;
+    const step = session.scrub.down(fractionOf(event));
+    paintListenFraction(step.fraction);
+    try {
+      el.setPointerCapture(event.pointerId);
+    } catch {
+      /* already released */
+    }
+  });
+  el.addEventListener("pointermove", (event) => {
+    if (!session.scrub.active) return;
+    const step = session.scrub.move(fractionOf(event));
+    if (!step.seek && step.fraction != null) paintListenFraction(step.fraction);
+  });
+  const finish = (event) => {
+    if (!session.scrub.active) return;
+    const step = event.type === "pointercancel" ? session.scrub.cancel() : session.scrub.up();
+    if (!step.seek) return;
+    paintListenFraction(step.fraction);
+    commitListenSeek(step.fraction);
+  };
+  el.addEventListener("pointerup", finish);
+  el.addEventListener("pointercancel", finish);
+  el.addEventListener("keydown", (event) => {
+    if (event.repeat || (event.key !== "ArrowRight" && event.key !== "ArrowLeft")) return;
+    event.preventDefault();
+    const audio = els.audio;
+    if (!(Number.isFinite(audio.duration) && audio.duration > 0)) return;
+    const delta = event.key === "ArrowRight" ? 10 : -10;
+    audio.currentTime = Math.min(audio.duration, Math.max(0, audio.currentTime + delta));
+    syncPositionState();
+  });
 }
 
 function bindAudio() {
@@ -878,7 +957,8 @@ function bindAudio() {
   audio.addEventListener("timeupdate", () => {
     const d = audio.duration;
     els.listenTime.textContent = Number.isFinite(d) ? `${formatTime(audio.currentTime)} / ${formatTime(d)}` : formatTime(audio.currentTime);
-    els.listenProgress.style.transform = `scaleX(${d > 0 ? Math.min(1, audio.currentTime / d) : 0})`;
+    if (!session.scrub.active) paintListenFraction(d > 0 ? Math.min(1, audio.currentTime / d) : 0);
+    syncPositionState();
     followAudio();
     const now = Date.now();
     if (now - session.lastAudioSave > 5000) {
@@ -982,11 +1062,25 @@ function bindAudio() {
     };
     set("play", () => audio.play());
     set("pause", () => audio.pause());
-    set("seekbackward", () => (audio.currentTime = Math.max(0, audio.currentTime - 30)));
-    set("seekforward", () => (audio.currentTime = audio.currentTime + 30));
+    set("seekbackward", () => {
+      audio.currentTime = Math.max(0, audio.currentTime - 30);
+      syncPositionState();
+    });
+    set("seekforward", () => {
+      audio.currentTime = audio.currentTime + 30;
+      syncPositionState();
+    });
+    set("seekto", (details) => {
+      const seconds = Number(details?.seekTime);
+      if (!Number.isFinite(seconds)) return;
+      const d = audio.duration;
+      audio.currentTime = Number.isFinite(d) && d > 0 ? Math.min(d, Math.max(0, seconds)) : Math.max(0, seconds);
+      syncPositionState();
+    });
     set("previoustrack", () => $("listen-prev").click());
     set("nexttrack", () => $("listen-next").click());
   }
+  bindScrub();
 }
 
 /* ---------- service worker ---------- */

@@ -37,9 +37,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="讀書" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=11" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=11" />
-    <link rel="stylesheet" href="./styles.css?v=11" />
+    <link rel="icon" href="./icon.svg?v=12" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=12" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
     <title>書架 · Library Read</title>
   </head>
   <body class="shell-shelf">
@@ -135,7 +135,19 @@
           </button>
           <label class="follow"><input type="checkbox" id="listen-follow" checked /> 跟著翻章</label>
         </div>
-        <span class="listen-progress"><i id="listen-progress-bar"></i></span>
+        <div
+          id="listen-scrub"
+          class="listen-progress"
+          role="slider"
+          tabindex="0"
+          aria-label="播放進度"
+          aria-valuemin="0"
+          aria-valuemax="1000"
+          aria-valuenow="0"
+          aria-orientation="horizontal"
+        >
+          <i id="listen-progress-bar"></i>
+        </div>
       </div>
     </section>
 
@@ -166,6 +178,6 @@
     </div>
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=11"></script>
+    <script type="module" src="./app.js?v=12"></script>
   </body>
 </html>
