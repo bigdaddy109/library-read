@@ -4,13 +4,16 @@ import { parseEpub } from "../docs/epub.js?v=1";
 import {
   alignmentKind,
   audioIndexForText,
+  followPageTarget,
   formatTime,
   loadOffset,
   offsetToAlign,
+  pageIndexForFraction,
   saveOffset,
   textChapterForSpine,
   textChapters,
   textIndexForAudio,
+  trackChapterSpan,
 } from "../docs/listen.js?v=1";
 import { FIXTURE_BOOKS, fixtureEpubBytes } from "./library-fixture.mjs";
 import { titleFromFilename } from "../docs/library.js?v=1";
@@ -88,5 +91,102 @@ describe("audio ↔ text (chapter level)", () => {
   it("formats times", () => {
     assert.equal(formatTime(5), "0:05");
     assert.equal(formatTime(3725), "1:02:05");
+  });
+});
+
+describe("proportional page follow", () => {
+  it("a whole-book file covers every text chapter", async () => {
+    const { chapters, tracks } = await fixture("munroe/how-to");
+    assert.equal(chapters.length, 2);
+    assert.deepEqual(trackChapterSpan(chapters, tracks, 0), { start: 0, count: 2 });
+  });
+
+  it("one track per chapter stays inside that chapter", async () => {
+    const { chapters, tracks } = await fixture("munroe/what-if-1");
+    assert.deepEqual(trackChapterSpan(chapters, tracks, 1), { start: 1, count: 1 });
+  });
+
+  it("a part covers the chapters until the next track", async () => {
+    const { chapters, tracks } = await fixture("immune/immune");
+    assert.deepEqual(trackChapterSpan(chapters, tracks, 0), { start: 0, count: 3 });
+    assert.deepEqual(trackChapterSpan(chapters, tracks, 1), { start: 3, count: 2 });
+    assert.deepEqual(trackChapterSpan(chapters, tracks, 2), { start: 5, count: 1 });
+  });
+
+  it("turns only when the estimate is at least one page ahead", () => {
+    const spines = [1];
+    assert.equal(pageIndexForFraction(0, 10, false), 0);
+    assert.equal(pageIndexForFraction(1, 10, false), 9);
+    assert.equal(
+      followPageTarget({ fraction: 0.02, scopeStart: 0, scopeCount: 1, atSpine: 1, atPage: 0, pages: 10, spines }),
+      null
+    );
+    const one = followPageTarget({
+      fraction: 0.12,
+      scopeStart: 0,
+      scopeCount: 1,
+      atSpine: 1,
+      atPage: 0,
+      pages: 10,
+      spines,
+    });
+    assert.equal(one.page, 1);
+    assert.equal(
+      followPageTarget({ fraction: 0.12, scopeStart: 0, scopeCount: 1, atSpine: 1, atPage: 1, pages: 10, spines }),
+      null
+    );
+    assert.equal(
+      followPageTarget({ fraction: 0.12, scopeStart: 0, scopeCount: 1, atSpine: 1, atPage: 3, pages: 10, spines }),
+      null
+    );
+  });
+
+  it("a whole-book fraction moves into a later chapter and does not go backward", () => {
+    const spines = [1, 2];
+    const ahead = followPageTarget({
+      fraction: 0.8,
+      scopeStart: 0,
+      scopeCount: 2,
+      atSpine: 1,
+      atPage: 0,
+      pages: 8,
+      spines,
+    });
+    assert.equal(ahead.chapter, 1);
+    assert.equal(ahead.spine, 2);
+    assert.equal(ahead.page, null);
+    assert.ok(ahead.local > 0.5);
+    assert.equal(
+      followPageTarget({ fraction: 0.1, scopeStart: 0, scopeCount: 2, atSpine: 2, atPage: 0, pages: 8, spines }),
+      null
+    );
+  });
+
+  it("a spread stays put when the estimate is the facing page already on screen", () => {
+    const spines = [1];
+    assert.equal(
+      followPageTarget({
+        fraction: 0.1,
+        scopeStart: 0,
+        scopeCount: 1,
+        atSpine: 1,
+        atPage: 0,
+        pages: 10,
+        spread: true,
+        spines,
+      }),
+      null
+    );
+    const next = followPageTarget({
+      fraction: 0.28,
+      scopeStart: 0,
+      scopeCount: 1,
+      atSpine: 1,
+      atPage: 0,
+      pages: 10,
+      spread: true,
+      spines,
+    });
+    assert.equal(next.page, 2);
   });
 });

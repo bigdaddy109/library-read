@@ -1,10 +1,11 @@
 /**
- * Listen-along v1: chapter-level alignment between audio tracks and EPUB text.
+ * Listen-along: chapter alignment, plus a proportional page estimate inside
+ * the chapters one audio file covers (a whole book, or a single chapter).
  * No timestamps exist, so a track maps to a text chapter by TOC title, else
  * by equal count, else proportionally. A per-book offset (set by the reader
  * with 對齊到這一章) shifts the whole mapping. Pure; safe for Node tests.
  */
-import { chapterMatchCore, spineIndexForChapter } from "./epub.js?v=10";
+import { chapterMatchCore, spineIndexForChapter } from "./epub.js?v=11";
 
 export const ALIGN_KEY = "libraryread.align.v1";
 
@@ -118,6 +119,70 @@ export function saveOffset(bookId, offset, store = defaultStore()) {
   } catch {
     /* private mode / quota */
   }
+}
+
+/**
+ * Text chapters this audio file is responsible for.
+ * One file for the book covers every chapter. One file per chapter covers that
+ * chapter only. A shorter part covers the chapters until the next track.
+ */
+export function trackChapterSpan(chapters, tracks, audioIndex, offset = 0) {
+  const list = Array.isArray(chapters) ? chapters : [];
+  const n = list.length;
+  if (!n) return { start: 0, count: 0 };
+  const start = textIndexForAudio(list, tracks, audioIndex, offset);
+  const trackCount = Array.isArray(tracks) ? tracks.length : 0;
+  const next = audioIndex + 1 < trackCount ? textIndexForAudio(list, tracks, audioIndex + 1, offset) : n;
+  const count = Math.max(1, Math.min(n - start, next - start));
+  return { start, count };
+}
+
+/** Page index for a 0–1 position inside a chapter. Spreads land on even pages. */
+export function pageIndexForFraction(fraction, pages, spread = false) {
+  const count = Math.max(1, Number(pages) || 1);
+  if (count <= 1) return 0;
+  const f = clamp(Number(fraction) || 0, 0, 1);
+  let page = Math.round(f * (count - 1));
+  if (spread) page -= page % 2;
+  const last = count - 1;
+  const lastStart = spread ? last - (last % 2) : last;
+  return Math.max(0, Math.min(page, lastStart));
+}
+
+/**
+ * Where playback should turn the text.
+ * Returns null unless the estimate is at least one page ahead of the current
+ * view (a spread already shows the facing page, so that needs a full turn).
+ * A later chapter is ahead; an earlier one is not pulled back.
+ * `page` is set only when the target is the chapter already on screen.
+ * Otherwise the caller lays that chapter out and applies `local`.
+ */
+export function followPageTarget({
+  fraction,
+  scopeStart = 0,
+  scopeCount = 1,
+  atSpine = 0,
+  atPage = 0,
+  pages = 1,
+  spread = false,
+  spines = [],
+} = {}) {
+  const count = Math.max(1, scopeCount | 0);
+  const start = Math.max(0, scopeStart | 0);
+  const f = clamp(Number(fraction) || 0, 0, 1);
+  const pos = Math.min(count - 1e-9, f * count);
+  const rel = Math.min(count - 1, Math.floor(pos));
+  const local = pos - rel;
+  const chapter = start + rel;
+  const spine = spines[chapter];
+  if (!Number.isInteger(spine)) return null;
+  if (spine < atSpine) return null;
+  if (spine > atSpine) return { chapter, spine, local, page: null };
+  const estimate = pageIndexForFraction(local, pages, spread);
+  const step = spread ? 2 : 1;
+  const current = spread ? atPage - (atPage % 2) : Math.max(0, atPage | 0);
+  if (estimate >= current + step) return { chapter, spine, local, page: estimate };
+  return null;
 }
 
 export function formatTime(seconds) {
