@@ -735,9 +735,35 @@ h1 {
 }
 
 .reader-top .ghost {
+  flex-shrink: 0;
+  min-width: 44px;
   min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.35rem 0.7rem;
+  white-space: nowrap;
   background: rgba(255, 255, 255, 0.35);
+}
+
+.reader-top .ghost[hidden] {
+  display: none;
+}
+
+/* .ghost:hover paints the label in --paper. The reader bar keeps a light
+   fill, so the label has to stay --ink or a tap makes 「更多」 disappear. */
+.reader-top .ghost:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.reader-tools,
+.reader-menu {
+  display: contents;
+}
+
+#reader-more {
+  display: none;
 }
 
 .reader-top .turn-toggle {
@@ -1399,6 +1425,43 @@ h1 {
 }
 
 @media (max-width: 400px) {
+  .reader-tools {
+    display: block;
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  #reader-more {
+    display: inline-flex;
+  }
+
+  .reader-menu {
+    display: none;
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 0.3rem);
+    right: 0;
+    min-width: 11rem;
+    padding: 0.35rem;
+    border-radius: 0.85rem;
+    background: var(--page);
+    box-shadow: 0 12px 32px rgba(28, 25, 20, 0.22);
+  }
+
+  .reader-tools.is-open .reader-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .reader-menu .ghost {
+    width: 100%;
+  }
+
+  #reader-more.needs-reauth {
+    box-shadow: inset 0 0 0 2px #c45c3e;
+  }
+
   .paper {
     padding-left: calc(0.8rem + var(--safe-l));
     padding-right: calc(0.8rem + var(--safe-r));
@@ -1460,7 +1523,9 @@ html[data-theme="sepia"] .cover-card,
 html[data-theme="dark"] .search input,
 html[data-theme="sepia"] .search input,
 html[data-theme="dark"] .reader-top .ghost,
-html[data-theme="sepia"] .reader-top .ghost {
+html[data-theme="sepia"] .reader-top .ghost,
+html[data-theme="dark"] .reader-top .ghost:hover,
+html[data-theme="sepia"] .reader-top .ghost:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--ink);
 }

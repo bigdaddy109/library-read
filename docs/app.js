@@ -9,7 +9,7 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=12";
+} from "./library.js?v=13";
 import {
   listenHeardChapter,
   listenHeardLabel,
@@ -30,7 +30,7 @@ import {
   sleepIsDue,
   sleepToast,
   themeChoiceLabel,
-} from "./comfort.js?v=12";
+} from "./comfort.js?v=13";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -54,15 +54,15 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=12";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=12";
+} from "./drive.js?v=13";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=13";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=12";
+} from "./link.js?v=13";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
@@ -80,8 +80,8 @@ import {
   textChapters,
   textIndexForAudio,
   trackChapterSpan,
-} from "./listen.js?v=12";
-import { Reader } from "./reader.js?v=12";
+} from "./listen.js?v=13";
+import { Reader } from "./reader.js?v=13";
 import {
   closeBook,
   findShelfBook,
@@ -89,8 +89,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=12";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=12";
+} from "./shelf.js?v=13";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=13";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -135,7 +135,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=12" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=13" },
   demo: true,
 };
 
@@ -252,11 +252,18 @@ function updateDriveChrome() {
   }
 }
 
+function syncReauthCue() {
+  const more = $("reader-more");
+  if (!more) return;
+  more.classList.toggle("needs-reauth", !!els.readerReauth && !els.readerReauth.hidden);
+}
+
 function showReauth() {
   els.reauth?.classList.remove("hidden");
   if (els.reauth) els.reauth.hidden = false;
   els.readerReauth?.classList.remove("hidden");
   if (els.readerReauth) els.readerReauth.hidden = false;
+  syncReauthCue();
 }
 
 function hideReauth() {
@@ -264,6 +271,15 @@ function hideReauth() {
   if (els.reauth) els.reauth.hidden = true;
   els.readerReauth?.classList.add("hidden");
   if (els.readerReauth) els.readerReauth.hidden = true;
+  syncReauthCue();
+}
+
+function setReaderMenu(open) {
+  const tools = $("reader-tools");
+  const more = $("reader-more");
+  if (!tools || !more) return;
+  tools.classList.toggle("is-open", open);
+  more.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
 function showLinkBanner() {
@@ -1224,6 +1240,13 @@ function bind() {
     updateDriveChrome();
   });
   $("reader-back").addEventListener("click", closeReader);
+  $("reader-more")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setReaderMenu(!$("reader-tools")?.classList.contains("is-open"));
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest?.("#reader-tools")) setReaderMenu(false);
+  });
   $("reader-toc").addEventListener("click", () => {
     renderToc();
     openSheet("toc-sheet");
@@ -1249,6 +1272,10 @@ function bind() {
     if (els.reader.hidden) return;
     if (e.target?.closest?.("input, textarea")) return;
     if (e.key === "Escape") {
+      if ($("reader-tools")?.classList.contains("is-open")) {
+        setReaderMenu(false);
+        return;
+      }
       if (document.querySelector(".sheet:not([hidden])")) hideSheets();
       else closeReader();
     } else if (e.key === "ArrowRight" || e.key === "PageDown" || (e.key === " " && !e.shiftKey)) {

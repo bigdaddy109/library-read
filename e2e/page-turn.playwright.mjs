@@ -288,6 +288,8 @@ test("快速換頁 is remembered and skips the curl", async ({ page }, testInfo)
     await page.screenshot({ path: testInfo.outputPath("fast-before.png") });
     saveShot(testInfo.outputPath("fast-before.png"), "webkit-iphone-390-fast-before.png");
   }
+  const more = page.locator("#reader-more");
+  if (await more.isVisible()) await more.click();
   const start = await readerState(page);
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");

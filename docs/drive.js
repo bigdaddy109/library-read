@@ -4,7 +4,7 @@
  * are public browser config (not secrets).
  */
 
-import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js?v=12";
+import { AUDIO_EXT, COVER_EXT, EPUB_EXT, SKIP_FOLDERS, extOf } from "./library.js?v=13";
 
 /** Public Web application OAuth Client ID. Not a secret. */
 export const GOOGLE_OAUTH_CLIENT_ID =

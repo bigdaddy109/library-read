@@ -37,9 +37,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="讀書" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg?v=12" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=12" />
-    <link rel="stylesheet" href="./styles.css?v=12" />
+    <link rel="icon" href="./icon.svg?v=13" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=13" />
+    <link rel="stylesheet" href="./styles.css?v=13" />
     <title>書架 · Library Read</title>
   </head>
   <body class="shell-shelf">
@@ -97,11 +97,16 @@
       <header class="reader-top">
         <button type="button" id="reader-back" class="ghost">← 書架</button>
         <p id="reader-title" class="reader-title"></p>
-        <button type="button" id="reader-reauth" class="ghost hidden" hidden>重新授權</button>
         <button type="button" id="reader-toc" class="ghost">目錄</button>
-        <button type="button" id="reader-font" class="ghost" aria-label="字級">Aa</button>
-        <button type="button" id="reader-theme" class="ghost theme-toggle" data-theme-toggle>跟隨系統</button>
-        <button type="button" id="reader-turn" class="ghost turn-toggle" aria-pressed="false">快速換頁</button>
+        <div class="reader-tools" id="reader-tools">
+          <button type="button" id="reader-more" class="ghost" aria-expanded="false" aria-controls="reader-menu" aria-haspopup="true">更多</button>
+          <div id="reader-menu" class="reader-menu">
+            <button type="button" id="reader-reauth" class="ghost hidden" hidden>重新授權</button>
+            <button type="button" id="reader-font" class="ghost" aria-label="字級">Aa</button>
+            <button type="button" id="reader-theme" class="ghost theme-toggle" data-theme-toggle>跟隨系統</button>
+            <button type="button" id="reader-turn" class="ghost turn-toggle" aria-pressed="false">快速換頁</button>
+          </div>
+        </div>
       </header>
       <div id="reader-book" class="reader-stage"></div>
       <footer class="reader-foot">
@@ -178,6 +183,6 @@
     </div>
     <audio id="audio" preload="metadata" playsinline></audio>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script type="module" src="./app.js?v=12"></script>
+    <script type="module" src="./app.js?v=13"></script>
   </body>
 </html>
