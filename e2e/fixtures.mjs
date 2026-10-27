@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test as base, expect } from "@playwright/test";
@@ -215,4 +215,22 @@ export async function audioState(page) {
 
 export async function audioAdvances(page) {
   await expect.poll(async () => (await audioState(page)).time, { timeout: 20_000 }).toBeGreaterThan(0);
+}
+
+export const OPT_MEDIA = "/cursor/stores/self/media/opt-1-4";
+
+/** Viewport shot at CSS pixels (390×844 on the iPhone project). Saved for review on WebKit only.
+ * GitHub runners cannot write the agent store, so a denied mkdir must not fail CI. */
+export async function saveOptShot(page, testInfo, name) {
+  const path = testInfo.outputPath(`${name}.png`);
+  await page.screenshot({ path, scale: "css" });
+  if (testInfo.project.name !== "webkit-iphone-390" || !OPT_MEDIA) return path;
+  try {
+    mkdirSync(OPT_MEDIA, { recursive: true });
+    copyFileSync(path, `${OPT_MEDIA}/${name}.png`);
+  } catch (err) {
+    if (err?.code === "EACCES" || err?.code === "EPERM" || err?.code === "EROFS") return path;
+    throw err;
+  }
+  return `${OPT_MEDIA}/${name}.png`;
 }
