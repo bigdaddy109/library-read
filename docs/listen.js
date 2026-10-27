@@ -5,7 +5,7 @@
  * by equal count, else proportionally. A per-book offset (set by the reader
  * with 對齊到這一章) shifts the whole mapping. Pure; safe for Node tests.
  */
-import { chapterMatchCore, spineIndexForChapter } from "./epub.js?v=11";
+import { chapterMatchCore, spineIndexForChapter } from "./epub.js?v=12";
 
 export const ALIGN_KEY = "libraryread.align.v1";
 
@@ -183,6 +183,65 @@ export function followPageTarget({
   const current = spread ? atPage - (atPage % 2) : Math.max(0, atPage | 0);
   if (estimate >= current + step) return { chapter, spine, local, page: estimate };
   return null;
+}
+
+/** 0–1 position along a horizontal bar. Width 0 stays at the start. */
+export function scrubFraction(clientX, left, width) {
+  if (!(Number(width) > 0)) return 0;
+  return clamp((Number(clientX) - Number(left)) / Number(width), 0, 1);
+}
+
+/**
+ * A drag only previews. `seek` is true on release, never on move, so a long
+ * file does not issue a Drive Range request for every pointer step.
+ */
+export function createScrub() {
+  let fraction = null;
+  return {
+    get active() {
+      return fraction != null;
+    },
+    get fraction() {
+      return fraction;
+    },
+    down(next) {
+      fraction = clamp(Number(next) || 0, 0, 1);
+      return { seek: false, fraction };
+    },
+    move(next) {
+      if (fraction == null) return { seek: false, fraction: null };
+      fraction = clamp(Number(next) || 0, 0, 1);
+      return { seek: false, fraction };
+    },
+    up() {
+      if (fraction == null) return { seek: false, fraction: null };
+      const committed = fraction;
+      fraction = null;
+      return { seek: true, fraction: committed };
+    },
+    cancel() {
+      fraction = null;
+      return { seek: false, fraction: null };
+    },
+  };
+}
+
+export function secondsForFraction(fraction, duration) {
+  const d = Number(duration);
+  if (!Number.isFinite(d) || d <= 0) return 0;
+  return clamp(Number(fraction) || 0, 0, 1) * d;
+}
+
+/** Media Session position, or null until duration is known. Clamped into the file. */
+export function mediaPositionState({ duration, currentTime, playbackRate = 1 } = {}) {
+  const d = Number(duration);
+  if (!Number.isFinite(d) || d <= 0) return null;
+  const rate = Number(playbackRate);
+  return {
+    duration: d,
+    playbackRate: Number.isFinite(rate) && rate > 0 ? rate : 1,
+    position: clamp(Number(currentTime) || 0, 0, d),
+  };
 }
 
 export function formatTime(seconds) {
