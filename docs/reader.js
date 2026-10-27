@@ -12,8 +12,8 @@
  * a small pool of pre-laid-out clones per chapter, sliced into strips once
  * at the start of the turn.
  */
-import { renderChapter } from "./content.js?v=10";
-import { textChapterForSpine, textChapters } from "./listen.js?v=10";
+import { renderChapter } from "./content.js?v=11";
+import { textChapterForSpine, textChapters } from "./listen.js?v=11";
 
 export const FONT_STEPS = [0.95, 1.08, 1.22, 1.38];
 export const READER_PREFS_KEY = "libraryread.reader.v1";
@@ -753,6 +753,7 @@ export class Reader {
     } else {
       this.schedulePool(this.spineIndex);
       this.emit();
+      this.hooks.onUserTurn?.(this.position());
     }
     const pending = this.pendingGoTo;
     this.pendingGoTo = null;
@@ -812,6 +813,7 @@ export class Reader {
     this.page = target.page === "end" ? lastStart(this.pages, this.spread) : target.page;
     this.applyPage();
     this.emit();
+    this.hooks.onUserTurn?.(this.position());
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
       this.book.classList.remove("is-fast-turn");
       void this.book.offsetWidth;

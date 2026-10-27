@@ -9,7 +9,7 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=10";
+} from "./library.js?v=11";
 import {
   listenHeardChapter,
   listenHeardLabel,
@@ -30,7 +30,7 @@ import {
   sleepIsDue,
   sleepToast,
   themeChoiceLabel,
-} from "./comfort.js?v=10";
+} from "./comfort.js?v=11";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -54,27 +54,30 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=10";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=10";
+} from "./drive.js?v=11";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=11";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=10";
+} from "./link.js?v=11";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
   audioIndexForText,
+  followPageTarget,
   formatTime,
   loadOffset,
   offsetToAlign,
+  pageIndexForFraction,
   saveOffset,
   textChapters,
   textIndexForAudio,
-} from "./listen.js?v=10";
-import { Reader } from "./reader.js?v=10";
+  trackChapterSpan,
+} from "./listen.js?v=11";
+import { Reader } from "./reader.js?v=11";
 import {
   closeBook,
   findShelfBook,
@@ -82,8 +85,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=10";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=10";
+} from "./shelf.js?v=11";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=11";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -128,7 +131,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=10" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=11" },
   demo: true,
 };
 
@@ -143,6 +146,8 @@ const session = {
   playbackRate: 1,
   sleepUntil: null,
   sleepTick: 0,
+  followHold: false,
+  following: false,
 };
 
 let swReloading = false;
@@ -612,6 +617,7 @@ function loadTrack(index, { play = false, start = null } = {}) {
   const list = tracks();
   const ch = list[index];
   if (!ch) return;
+  if (index !== session.trackIndex) session.followHold = false;
   session.trackIndex = index;
   const audio = els.audio;
   const url = trackUrl(ch);
@@ -776,15 +782,59 @@ function renderTracks() {
   updateTrackChrome();
 }
 
-/** Move the text to the chapter that matches the playing track. */
+function playbackFraction() {
+  const audio = els.audio;
+  const d = audio.duration;
+  if (!Number.isFinite(d) || d <= 0) return null;
+  return Math.min(1, Math.max(0, audio.currentTime / d));
+}
+
+function moveFollow(spineIndex, page) {
+  session.following = true;
+  try {
+    reader.goTo(spineIndex, { page });
+  } finally {
+    session.following = false;
+  }
+}
+
+/** Follow the playing track: chapter span by proportion, and only forward by a full page. */
 function followAudio({ force = false } = {}) {
   if (!session.listen || !session.epub) return;
-  if (!force && !els.listenFollow.checked) return;
-  const textIdx = textIndexForAudio(reader.chapters, tracks(), session.trackIndex, session.offset);
-  const target = reader.chapters[textIdx];
+  if (force) session.followHold = false;
+  else if (!els.listenFollow.checked || session.followHold) return;
+  if (reader.turning) return;
+  const pos = reader.position();
+  const span = trackChapterSpan(reader.chapters, tracks(), session.trackIndex, session.offset);
+  const fraction = playbackFraction();
+  if (fraction == null || !span.count) {
+    const textIdx = textIndexForAudio(reader.chapters, tracks(), session.trackIndex, session.offset);
+    const target = reader.chapters[textIdx];
+    if (!target || (pos.textIndex === textIdx && pos.spineIndex === target.spineIndex)) return;
+    moveFollow(target.spineIndex, 0);
+    return;
+  }
+  const target = followPageTarget({
+    fraction,
+    scopeStart: span.start,
+    scopeCount: span.count,
+    atSpine: pos.spineIndex,
+    atPage: pos.page,
+    pages: pos.pages,
+    spread: pos.spread,
+    spines: reader.chapters.map((ch) => ch.spineIndex),
+  });
   if (!target) return;
-  if (reader.position().textIndex === textIdx) return;
-  reader.goTo(target.spineIndex);
+  const chapter = reader.chapters[target.chapter];
+  if (!chapter) return;
+  if (chapter.spineIndex !== pos.spineIndex) {
+    moveFollow(chapter.spineIndex, 0);
+    const laid = reader.position();
+    const page = pageIndexForFraction(target.local, laid.pages, laid.spread);
+    if (page > 0) moveFollow(chapter.spineIndex, page);
+    return;
+  }
+  if (target.page != null && target.page !== pos.page) moveFollow(chapter.spineIndex, target.page);
 }
 
 function alignHere() {
@@ -829,6 +879,7 @@ function bindAudio() {
     const d = audio.duration;
     els.listenTime.textContent = Number.isFinite(d) ? `${formatTime(audio.currentTime)} / ${formatTime(d)}` : formatTime(audio.currentTime);
     els.listenProgress.style.transform = `scaleX(${d > 0 ? Math.min(1, audio.currentTime / d) : 0})`;
+    followAudio();
     const now = Date.now();
     if (now - session.lastAudioSave > 5000) {
       session.lastAudioSave = now;
@@ -916,6 +967,9 @@ function bindAudio() {
     hideSheets();
     alignHere();
   });
+  els.listenFollow.addEventListener("change", () => {
+    if (els.listenFollow.checked) followAudio({ force: true });
+  });
 
   if ("mediaSession" in navigator) {
     const ms = navigator.mediaSession;
@@ -999,6 +1053,10 @@ const reader = new Reader(els.readerBook, {
   onChange: onReaderChange,
   onEdge(dir) {
     if (dir > 0) showToast("已經是最後一頁。");
+  },
+  onUserTurn() {
+    if (!session.listen || session.following || !els.listenFollow.checked) return;
+    session.followHold = true;
   },
 });
 syncTurnButton();

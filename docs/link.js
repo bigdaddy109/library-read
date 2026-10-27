@@ -3,7 +3,7 @@
  * ?series=<Drive series folder>&book=<EPUB file name without .epub>&ch=<1-based chapter>
  * Parsing and matching are pure. Loading a link must not call GIS; the button tap does.
  */
-import { KNOWN_COLLECTIONS } from "./library.js?v=10";
+import { KNOWN_COLLECTIONS } from "./library.js?v=11";
 
 export const LINK_MISSING_MESSAGE = "找不到這本書，已回到書架。";
 export const LINK_SIGN_IN_LABEL = "用 Google 登入並打開";
