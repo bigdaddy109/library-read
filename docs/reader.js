@@ -12,8 +12,8 @@
  * a small pool of pre-laid-out clones per chapter, sliced into strips once
  * at the start of the turn.
  */
-import { renderChapter } from "./content.js?v=13";
-import { textChapterForSpine, textChapters } from "./listen.js?v=13";
+import { renderChapter } from "./content.js?v=14";
+import { textChapterForSpine, textChapters } from "./listen.js?v=14";
 
 export const FONT_STEPS = [0.95, 1.08, 1.22, 1.38];
 export const READER_PREFS_KEY = "libraryread.reader.v1";

@@ -1,59 +1,13 @@
 /**
  * Reading-comfort helpers. Playback speed and the sleep timer follow
  * Library Listen (docs/app.js: RATES, cycleRate, SLEEP_MINUTES, cycleSleepTimer).
- * Listen opens a book with ?open=<id>; consumeOpenIntent (Listen app.js
- * around 2325–2348) reads that param. The id is the same makeBook id:
- * `${collection.id}/${slug(bookFolder)}`.
  */
-
-export const LISTEN_ORIGIN = "https://bigdaddy109.github.io/library-listen/";
-/** The key Jeff named, then the key Library Listen actually writes. */
-export const LISTEN_PROGRESS_KEYS = ["librarylisten.progress", "librarylisten.progress.v1"];
 
 export const RATES = [1, 1.25, 1.5];
 export const RATE_KEY = "libraryread.rate";
 export const SLEEP_MINUTES = [0, 15, 30, 45, 60];
 export const THEME_KEY = "libraryread.theme.v1";
 export const THEMES = ["system", "dark", "sepia"];
-
-export function listenOpenUrl(bookId, origin = LISTEN_ORIGIN) {
-  const url = new URL(origin);
-  url.searchParams.set("open", String(bookId || ""));
-  return url.href;
-}
-
-export function readListenRecord(bookId, store) {
-  if (!bookId || !store?.getItem) return null;
-  for (const key of LISTEN_PROGRESS_KEYS) {
-    let all = null;
-    try {
-      all = JSON.parse(store.getItem(key) || "null");
-    } catch {
-      all = null;
-    }
-    if (all && typeof all === "object" && all[bookId]) return all[bookId];
-  }
-  return null;
-}
-
-/** 1-based chapter, matching the order of book.chapters. */
-export function listenHeardChapter(book, record) {
-  if (!record || typeof record !== "object") return null;
-  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
-  const id = typeof record.chapterId === "string" ? record.chapterId : "";
-  if (id) {
-    const idx = chapters.findIndex((ch) => ch.id === id);
-    if (idx >= 0) return idx + 1;
-  }
-  const direct = Number(record.chapter);
-  if (Number.isInteger(direct) && direct >= 1 && direct <= Math.max(chapters.length, direct)) return direct;
-  return null;
-}
-
-export function listenHeardLabel(chapter) {
-  if (!Number.isInteger(chapter) || chapter < 1) return "";
-  return `Listen 聽到第 ${chapter} 章`;
-}
 
 export function nextRate(current) {
   const index = RATES.indexOf(Number(current));

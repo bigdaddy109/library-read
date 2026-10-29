@@ -107,7 +107,7 @@ test("the shelf shows 繼續閱讀 and a cover percentage", async ({ page }, tes
   await expect(page.locator("#reader-title")).toHaveText("What If?");
 });
 
-test("each book links to Library Listen and shows the heard chapter", async ({ page }, testInfo) => {
+test("a book ignores Library Listen progress and does not link there", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem(
       "librarylisten.progress",
@@ -115,16 +115,33 @@ test("each book links to Library Listen and shows the heard chapter", async ({ p
         "munroe/what-if-1": { chapterId: "02 - Global Windstorm.mp3", updatedAt: "2026-10-17T01:00:00.000Z" },
       })
     );
+    localStorage.setItem(
+      "librarylisten.progress.v1",
+      JSON.stringify({
+        "munroe/what-if-1": { chapterId: "01 - Introduction.mp3", updatedAt: "2026-10-17T02:00:00.000Z" },
+      })
+    );
+    localStorage.setItem(
+      "librarylisten.library.v1",
+      JSON.stringify([{ id: "listen-only/shelf", title: "Listen shelf only" }])
+    );
   });
   await page.goto(SITE);
+  await expect(page.locator('a[href*="library-listen"]')).toHaveCount(0);
+  await expect(page.locator(".mast")).not.toContainText("Library Listen");
   await signIn(page);
   await openCover(page, "munroe/what-if-1");
-  const jump = page.locator("#book-layer .listen-jump");
-  await expect(jump).toHaveText("到 Library Listen 聽這本");
-  await expect(jump).toHaveAttribute("href", /library-listen\/\?open=munroe%2Fwhat-if-1$/);
-  await expect(page.locator("#book-layer .listen-heard")).toHaveText("Listen 聽到第 2 章");
+  await expect(page.locator("#book-layer a[href*='library-listen']")).toHaveCount(0);
+  await expect(page.locator("#book-layer .listen-jump")).toHaveCount(0);
+  await expect(page.locator("#book-layer .listen-heard")).toHaveCount(0);
+  await expect(page.locator("#book-layer")).not.toContainText("到 Library Listen");
+  await expect(page.locator("#book-layer")).not.toContainText("Listen 聽到");
+  await expect(page.locator("#book-layer")).not.toContainText("Listen shelf only");
   await expect(page.locator("#book-layer .progress")).toContainText("尚未開始");
-  await keepShot(page, testInfo, "listen-link");
+  const ownSnapshot = await page.evaluate(() => localStorage.getItem("libraryread.library.v1"));
+  expect(ownSnapshot).toContain("munroe/what-if-1");
+  expect(ownSnapshot).not.toContain("listen-only/shelf");
+  await keepShot(page, testInfo, "book-no-listen-link");
 });
 
 test("night mode follows the system, then dark and dim-sepia persist", async ({ page }, testInfo) => {
