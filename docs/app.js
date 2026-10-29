@@ -9,11 +9,8 @@ import {
   saveTextProgress,
   textProgress,
   loadProgress,
-} from "./library.js?v=13";
+} from "./library.js?v=14";
 import {
-  listenHeardChapter,
-  listenHeardLabel,
-  listenOpenUrl,
   loadRate,
   loadThemeChoice,
   nextRate,
@@ -22,7 +19,6 @@ import {
   progressLineText,
   progressPercent,
   rateLabel,
-  readListenRecord,
   resolveTheme,
   saveRate,
   saveThemeChoice,
@@ -30,7 +26,7 @@ import {
   sleepIsDue,
   sleepToast,
   themeChoiceLabel,
-} from "./comfort.js?v=13";
+} from "./comfort.js?v=14";
 import {
   DRIVE_ERROR_KIND,
   DRIVE_UNAUTHORIZED_MESSAGE,
@@ -54,15 +50,15 @@ import {
   signInWithGoogle,
   signOutGoogle,
   tokenForRead,
-} from "./drive.js?v=13";
-import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=13";
+} from "./drive.js?v=14";
+import { parseEpub, spineCfi, spineIndexFromCfi } from "./epub.js?v=14";
 import {
   LINK_MISSING_MESSAGE,
   createDeepLinkSession,
   findLinkedBook,
   parseDeepLink,
   spineIndexForDeepLink,
-} from "./link.js?v=13";
+} from "./link.js?v=14";
 import {
   ALIGNMENT_LABELS,
   alignmentKind,
@@ -80,8 +76,8 @@ import {
   textChapters,
   textIndexForAudio,
   trackChapterSpan,
-} from "./listen.js?v=13";
-import { Reader } from "./reader.js?v=13";
+} from "./listen.js?v=14";
+import { Reader } from "./reader.js?v=14";
 import {
   closeBook,
   findShelfBook,
@@ -89,8 +85,8 @@ import {
   setShelfBooks,
   setSpreadStatus,
   shelfSource,
-} from "./shelf.js?v=13";
-import { getCachedEbook, putCachedEbook } from "./store.js?v=13";
+} from "./shelf.js?v=14";
+import { getCachedEbook, putCachedEbook } from "./store.js?v=14";
 
 const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "";
 const LIBRARY_KEY = "libraryread.library.v1";
@@ -135,7 +131,7 @@ const DEMO_BOOK = {
   subtitle: null,
   author: "Library Read",
   chapters: [],
-  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=13" },
+  ebook: { id: "demo.epub", name: "demo.epub", url: "./sample/demo.epub?v=14" },
   demo: true,
 };
 
@@ -395,16 +391,6 @@ function progressLine(book) {
 function coverProgress(book) {
   const pct = progressPercent(textProgress(book.id));
   return pct == null ? "" : `${pct}%`;
-}
-
-function listenHeardLine(book) {
-  let store = null;
-  try {
-    store = localStorage;
-  } catch {
-    return "";
-  }
-  return listenHeardLabel(listenHeardChapter(book, readListenRecord(book.id, store)));
 }
 
 /** Start a silent token fetch in this turn (the tap), before any await. Never a popup. */
@@ -1327,8 +1313,6 @@ function boot() {
     progressLine,
     continueBook: (books) => latestTextBook(books),
     coverProgress,
-    listenHref: (book) => listenOpenUrl(book.id),
-    listenHeard: listenHeardLine,
   });
   const snapshot = loadLibrarySnapshot();
   if (snapshot.length) {

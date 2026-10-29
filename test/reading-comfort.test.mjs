@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
-  LISTEN_PROGRESS_KEYS,
   RATE_KEY,
   THEME_KEY,
-  listenHeardChapter,
-  listenHeardLabel,
-  listenOpenUrl,
   loadRate,
   loadThemeChoice,
   nextRate,
@@ -15,7 +12,6 @@ import {
   progressLineText,
   progressPercent,
   rateLabel,
-  readListenRecord,
   resolveTheme,
   saveRate,
   saveThemeChoice,
@@ -33,15 +29,6 @@ function memoryStore() {
     removeItem: (k) => data.delete(k),
   };
 }
-
-const book = {
-  id: "munroe/what-if-1",
-  title: "What If?",
-  chapters: [
-    { id: "01 - Introduction.mp3", title: "Introduction" },
-    { id: "02 - Global Windstorm.mp3", title: "Global Windstorm" },
-  ],
-};
 
 describe("playback speed and sleep timer", () => {
   it("cycles 1 → 1.25 → 1.5 → 1 and persists the rate", () => {
@@ -99,26 +86,19 @@ describe("shelf progress", () => {
   });
 });
 
-describe("Library Listen link", () => {
-  it("opens the same book id with ?open=", () => {
-    const url = new URL(listenOpenUrl(book.id));
-    assert.equal(url.origin + url.pathname, "https://bigdaddy109.github.io/library-listen/");
-    assert.equal(url.searchParams.get("open"), book.id);
-  });
-
-  it("reads librarylisten.progress and the live .v1 key", () => {
-    const named = memoryStore();
-    named.setItem(LISTEN_PROGRESS_KEYS[0], JSON.stringify({ [book.id]: { chapterId: book.chapters[1].id } }));
-    assert.equal(listenHeardChapter(book, readListenRecord(book.id, named)), 2);
-    assert.equal(listenHeardLabel(2), "Listen 聽到第 2 章");
-
-    const live = memoryStore();
-    live.setItem(
-      LISTEN_PROGRESS_KEYS[1],
-      JSON.stringify({ [book.id]: { chapterId: book.chapters[0].id, positionSeconds: 12 } })
-    );
-    assert.equal(listenHeardChapter(book, readListenRecord(book.id, live)), 1);
-    assert.equal(readListenRecord("missing/book", live), null);
+describe("Library Listen independence", () => {
+  it("does not link to Library Listen or read its progress or shelf snapshot", () => {
+    const files = ["index.html", "app.js", "comfort.js", "shelf.js", "library.js", "sw.js"];
+    for (const name of files) {
+      const src = readFileSync(new URL(`../docs/${name}`, import.meta.url), "utf8");
+      assert.equal(src.includes("listenOpenUrl"), false, name);
+      assert.equal(src.includes("LISTEN_PROGRESS_KEYS"), false, name);
+      assert.equal(src.includes("librarylisten.progress"), false, name);
+      assert.equal(src.includes("librarylisten.library"), false, name);
+      assert.equal(src.includes("library-listen"), false, name);
+    }
+    const app = readFileSync(new URL("../docs/app.js", import.meta.url), "utf8");
+    assert.match(app, /const LIBRARY_KEY = "libraryread\.library\.v1"/);
   });
 });
 

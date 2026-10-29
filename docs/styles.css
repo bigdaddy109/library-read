@@ -131,7 +131,6 @@ h1 {
   font-size: 0.95rem;
 }
 
-.player-link,
 .ghost,
 .primary,
 .close-book,
@@ -151,7 +150,6 @@ h1 {
 }
 
 .ghost:hover,
-.player-link:hover,
 .chip[aria-pressed="true"] {
   background: var(--ink);
   color: var(--paper);
@@ -630,24 +628,6 @@ h1 {
 
 .page.right .progress {
   margin: 1rem 0 0;
-  font-size: 0.86rem;
-}
-
-.listen-jump {
-  flex: 1 1 100%;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  color: var(--ink);
-  font-size: 0.9rem;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.listen-heard {
-  flex: 1 1 100%;
-  margin: 0;
-  color: var(--muted);
   font-size: 0.86rem;
 }
 

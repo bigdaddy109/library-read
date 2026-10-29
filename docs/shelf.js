@@ -15,9 +15,9 @@ import {
   seriesIdForBook,
   seriesMeta,
   shelfStatusLabel,
-} from "./catalog.js?v=13";
-import { coverSvg } from "./covers.js?v=13";
-import { trimQuery } from "./search.js?v=13";
+} from "./catalog.js?v=14";
+import { coverSvg } from "./covers.js?v=14";
+import { trimQuery } from "./search.js?v=14";
 
 const SERIES_KEY = "libraryread.shelfSeries";
 
@@ -336,8 +336,6 @@ function renderSpread(book, opened) {
           <div class="actions">
             <button type="button" class="primary" data-open="read">讀</button>
             <button type="button" class="primary" data-open="listen">邊聽邊讀</button>
-            <a class="listen-jump" rel="noopener"></a>
-            <p class="listen-heard"></p>
           </div>
         </section>
         <div class="cover-leaf" aria-hidden="true">
@@ -365,19 +363,6 @@ function renderSpread(book, opened) {
   listen.disabled = !(flags.read && flags.audio);
   read.addEventListener("click", () => hooks.onRead?.(book, { listen: false }));
   listen.addEventListener("click", () => hooks.onRead?.(book, { listen: true }));
-  const jump = els.bookStage.querySelector(".listen-jump");
-  const href = hooks.listenHref?.(book) || "";
-  if (href) {
-    jump.href = href;
-    jump.target = "_blank";
-    jump.textContent = "到 Library Listen 聽這本";
-  } else {
-    jump.remove();
-  }
-  const heard = els.bookStage.querySelector(".listen-heard");
-  const heardText = hooks.listenHeard?.(book) || "";
-  if (heardText) heard.textContent = heardText;
-  else heard.remove();
 }
 
 export function initShelf(options = {}) {
